@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy-cockroachdb==2.0.3
+sqlalchemy>=2.0.0
+psycopg2-binary
+databases[postgresql]
+asyncpg
+pydantic
+python-jose[cryptography]
+passlib==1.7.4
+bcrypt==3.2.0
+httpx
