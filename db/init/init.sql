@@ -86,6 +86,18 @@ CREATE INDEX ON sensor_data (device_id, timestamp DESC) WHERE device_id IS NOT N
 CREATE INDEX ON sensor_data (sensor_id, timestamp DESC) WHERE sensor_id IS NOT NULL;
 CREATE INDEX sensor_data_reading_idx ON sensor_data USING GIN (reading);
 
+-- Seed default admin account (admin:admin).
+INSERT INTO users (username, password_hash, is_house_owner) VALUES
+    ('admin', '$2b$12$R3dnZHEGxvKkg.ZtvDLwJ.ntf15rLt4wr..RBxlBVpGZfhi1TZ4Km', TRUE)
+ON CONFLICT (username) DO NOTHING;
+
+-- Seed a default profile for the admin account.
+INSERT INTO setting_profiles (user_id, name, away_mode)
+SELECT id, 'Default', FALSE
+FROM users
+WHERE username = 'admin'
+ON CONFLICT (user_id, name) DO NOTHING;
+
 -- Seed from current Adafruit feed list:
 -- Devices (controllable): door, lb1, light-pwm, pir, rgb
 INSERT INTO devices (feed_key, name, type, status, value, last_record_time) VALUES
