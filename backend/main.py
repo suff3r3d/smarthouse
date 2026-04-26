@@ -2,8 +2,11 @@ import database
 import threading
 import asyncio
 import logging
+import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from routes.api import router as api_router
 from utils import AdafruitIO, JWTHandler
 
@@ -15,6 +18,7 @@ def _device_polling_worker(stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         try:
             devices = asyncio.run(AdafruitIO().get_all_devices())
+            database.sync_feed_latest_values(devices)
             for device in devices:
                 device_name = device.get("name") or device.get("key") or "unknown"
                 print(f"{device_name}: {device.get('last_data')}", flush=True)
@@ -25,6 +29,8 @@ def _device_polling_worker(stop_event: threading.Event) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await database.connect()
+
     app.state.device_poll_stop_event = threading.Event()
     app.state.device_poll_thread = threading.Thread(
         target=_device_polling_worker,
@@ -33,7 +39,6 @@ async def lifespan(app: FastAPI):
         name="device-polling-thread",
     )
     app.state.device_poll_thread.start()
-    await database.connect()
     yield
     app.state.device_poll_stop_event.set()
     app.state.device_poll_thread.join(timeout=5)
@@ -42,6 +47,38 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(api_router, prefix="/api")
+
+
+def _copy_response_headers(response):
+    return {
+        key: value
+        for key, value in response.headers.items()
+        if key.lower() not in {"content-length", "content-type"}
+    }
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(_request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"success": False, "message": str(exc.detail)},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"success": False, "message": str(exc.errors())},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_request: Request, _exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"success": False, "message": "Internal server error"},
+    )
 
 
 @app.middleware("http")
@@ -55,6 +92,17 @@ async def auth_context_middleware(request: Request, call_next):
         authorization = request.headers.get("authorization", "")
         if authorization.lower().startswith("bearer "):
             auth_token = authorization[7:].strip()
+    if not auth_token:
+        content_type = request.headers.get("content-type", "").lower()
+        if "application/json" in content_type:
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if isinstance(body, dict):
+                body_token = body.get("auth_token")
+                if isinstance(body_token, str) and body_token.strip():
+                    auth_token = body_token.strip()
 
     if auth_token:
         decoded = JWTHandler.decode(auth_token)
@@ -74,7 +122,41 @@ async def auth_context_middleware(request: Request, call_next):
                     request.state.auth_user = user
                     request.state.setting_profile_ids = database.get_setting_profile_ids_by_user_id(user.id)
 
-    return await call_next(request)
+    response = await call_next(request)
+
+    content_type = response.headers.get("content-type", "").lower()
+    if "application/json" not in content_type or response.status_code == 204:
+        return response
+
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk
+
+    try:
+        payload = json.loads(body.decode() if body else "null")
+    except Exception:
+        payload = None
+
+    if isinstance(payload, dict) and "success" in payload and (
+        "data" in payload or "message" in payload
+    ):
+        return JSONResponse(
+            status_code=response.status_code,
+            content=payload,
+            headers=_copy_response_headers(response),
+        )
+
+    if 200 <= response.status_code < 400:
+        wrapped = {"success": True, "data": payload}
+    else:
+        message = payload.get("detail") if isinstance(payload, dict) else payload
+        wrapped = {"success": False, "message": message or "Request failed"}
+
+    return JSONResponse(
+        status_code=response.status_code,
+        content=wrapped,
+        headers=_copy_response_headers(response),
+    )
 
 @app.get("/")
 async def root():

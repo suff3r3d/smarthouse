@@ -27,13 +27,19 @@ def load_devices_route_module():
     stub_utils.JWTHandler = StubJWTHandler
     stub_utils.AdafruitIO = StubAdafruitIO
 
+    stub_database = types.ModuleType("database")
+    stub_database.get_device_value_by_feed_key = lambda _feed_key: None
+    stub_database.list_devices_from_db = lambda: []
+
     previous_utils = sys.modules.get("utils")
+    previous_database = sys.modules.get("database")
     previous_feed_types = sys.modules.get("routes.feed_types")
     stub_feed_types = types.ModuleType("routes.feed_types")
     stub_feed_types.DEVICE_FEEDS = {"door", "lb1", "pir", "rgb", "light-pwm"}
     stub_feed_types.is_device_feed = lambda feed_key: feed_key in stub_feed_types.DEVICE_FEEDS
 
     sys.modules["utils"] = stub_utils
+    sys.modules["database"] = stub_database
     sys.modules["routes.feed_types"] = stub_feed_types
     try:
         module = importlib.util.module_from_spec(spec)
@@ -44,6 +50,10 @@ def load_devices_route_module():
             sys.modules["utils"] = previous_utils
         else:
             del sys.modules["utils"]
+        if previous_database is not None:
+            sys.modules["database"] = previous_database
+        else:
+            del sys.modules["database"]
         if previous_feed_types is not None:
             sys.modules["routes.feed_types"] = previous_feed_types
         else:
@@ -84,16 +94,13 @@ class DeviceSetStateApiTests(unittest.IsolatedAsyncioTestCase):
         devices_module = load_devices_route_module()
 
         with patch.object(devices_module.JWTHandler, "decode", return_value={"sub": "1"}), patch.object(
-            devices_module, "AdafruitIO"
-        ) as mock_aio_cls:
-            mock_aio = mock_aio_cls.return_value
-            mock_aio.get_feed_value = AsyncMock(return_value="28.00")
-
+            devices_module.database, "get_device_value_by_feed_key", return_value="28.00"
+        ) as mock_get_value:
             payload = devices_module.DeviceAuthPayload(auth_token="valid-token")
             response = await devices_module.get_device_state("door", payload)
 
         self.assertEqual(response, "28.00")
-        mock_aio.get_feed_value.assert_awaited_once_with("door")
+        mock_get_value.assert_called_once_with("door")
 
     async def test_get_state_invalid_token_returns_401(self):
         devices_module = load_devices_route_module()
@@ -125,6 +132,18 @@ class DeviceSetStateApiTests(unittest.IsolatedAsyncioTestCase):
                 await devices_module.get_device_state("temperature", payload)
 
         self.assertEqual(context.exception.status_code, 400)
+
+    async def test_get_state_not_found_returns_404(self):
+        devices_module = load_devices_route_module()
+        payload = devices_module.DeviceAuthPayload(auth_token="valid-token")
+
+        with patch.object(devices_module.JWTHandler, "decode", return_value={"sub": "1"}), patch.object(
+            devices_module.database, "get_device_value_by_feed_key", return_value=None
+        ):
+            with self.assertRaises(devices_module.HTTPException) as context:
+                await devices_module.get_device_state("door", payload)
+
+        self.assertEqual(context.exception.status_code, 404)
 
 
 if __name__ == "__main__":

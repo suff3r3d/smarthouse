@@ -4,6 +4,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
+import database
 from routes.feed_types import DEVICE_FEEDS, is_device_feed
 from utils import AdafruitIO, JWTHandler
 
@@ -25,19 +26,13 @@ async def list_devices():
     Get a list of all controllable devices and their current states.
     """
     try:
-        aio = AdafruitIO()
-        all_feeds = await aio.get_all_devices()
-        devices = [feed for feed in all_feeds if (feed.get("key") or "") in DEVICE_FEEDS]
+        devices = database.list_devices_from_db()
+        devices = [device for device in devices if (device.get("feed_key") or "") in DEVICE_FEEDS]
         return {"devices": devices, "count": len(devices)}
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        )
     except Exception as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch devices from Adafruit IO: {exc}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch devices from database: {exc}",
         )
 
 
@@ -97,15 +92,16 @@ async def get_device_state(device_id: str, payload: DeviceAuthPayload):
         )
 
     try:
-        aio = AdafruitIO()
-        return await aio.get_feed_value(device_id)
-    except ValueError as exc:
+        value = database.get_device_value_by_feed_key(device_id)
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
+            detail=f"Failed to get device value from database: {exc}",
         )
-    except httpx.HTTPError as exc:
+
+    if value is None:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to get device value from Adafruit IO: {exc}",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No stored value found for device '{device_id}'",
         )
+    return value
