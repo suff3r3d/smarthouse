@@ -1,31 +1,13 @@
 import database
 import threading
-import asyncio
-import logging
 import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from routes.api import router as api_router
-from utils import AdafruitIO, JWTHandler
-
-logger = logging.getLogger("device_poller")
-
-
-def _device_polling_worker(stop_event: threading.Event) -> None:
-    print("[device-poller] started", flush=True)
-    while not stop_event.is_set():
-        try:
-            devices = asyncio.run(AdafruitIO().get_all_devices())
-            database.sync_feed_latest_values(devices)
-            for device in devices:
-                device_name = device.get("name") or device.get("key") or "unknown"
-                print(f"{device_name}: {device.get('last_data')}", flush=True)
-        except Exception as exc:
-            logger.exception("Device polling error: %s", exc)
-        stop_event.wait(60)
-    print("[device-poller] stopped", flush=True)
+from utils import JWTHandler
+from workers import device_polling_worker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,7 +15,7 @@ async def lifespan(app: FastAPI):
 
     app.state.device_poll_stop_event = threading.Event()
     app.state.device_poll_thread = threading.Thread(
-        target=_device_polling_worker,
+        target=device_polling_worker,
         args=(app.state.device_poll_stop_event,),
         daemon=True,
         name="device-polling-thread",
