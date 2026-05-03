@@ -1,4 +1,9 @@
-from fastapi import APIRouter
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, status
+
+import database
 
 router = APIRouter()
 
@@ -11,9 +16,16 @@ async def get_system_mode():
     pass
 
 
-@router.get("/alerts", summary="List Recent Alerts")
-async def get_alerts():
+@router.get("/alerts/list", summary="List Alerts")
+async def list_alerts(since: Optional[datetime] = None):
     """
-    Get a list of recent alerts.
+    Get a list of alerts.
     """
-    pass
+    try:
+        alerts = database.list_alerts(limit=100, since=since)
+        return {"alerts": alerts, "count": len(alerts)}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch alerts from database: {exc}",
+        )

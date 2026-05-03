@@ -1,10 +1,22 @@
 DROP TABLE IF EXISTS sensor_data, alerts, schedules, sensors, devices, setting_profiles, users CASCADE;
-DROP TYPE IF EXISTS user_role, sensor_type, device_type, device_status, action_type;
+DROP TYPE IF EXISTS user_role, sensor_type, device_type, device_status, action_type, alert_type;
 
 CREATE TYPE device_type AS ENUM ('DOOR', 'LIGHT', 'MOTION', 'RGB', 'DIMMER', 'GENERIC');
 CREATE TYPE sensor_type AS ENUM ('TEMPERATURE', 'HUMIDITY', 'RAIN', 'GAS', 'LIGHT_INTENSITY', 'GENERIC');
 CREATE TYPE device_status AS ENUM ('ONLINE', 'OFFLINE', 'ERROR');
 CREATE TYPE action_type AS ENUM ('TURN_ON', 'TURN_OFF', 'SET_VALUE');
+CREATE TYPE alert_type AS ENUM (
+    'WARNING',
+    'INTRUSION',
+    'DOOR_FORCED_OPEN',
+    'MOTION_DETECTED',
+    'GAS_LEAK',
+    'RAIN_DETECTED',
+    'HIGH_TEMPERATURE',
+    'LOW_TEMPERATURE',
+    'LOW_LIGHT',
+    'DEVICE_OFFLINE'
+);
 
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -18,8 +30,9 @@ CREATE TABLE setting_profiles (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
-    temp_upper_threshold FLOAT,
-    temp_lower_threshold FLOAT,
+    temp_lower_threshold FLOAT DEFAULT 15.0,
+    temp_upper_threshold FLOAT DEFAULT 35.0,
+    gas_upper_threshold FLOAT DEFAULT 800.0,
     away_mode BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(user_id, name)
 );
@@ -54,7 +67,8 @@ CREATE TABLE schedules (
 
 CREATE TABLE alerts (
     id SERIAL PRIMARY KEY,
-    device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL,
+    alert_type alert_type NOT NULL DEFAULT 'WARNING',
+    feed_key VARCHAR(100),
     message TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -81,7 +95,7 @@ CREATE INDEX ON users (current_setting_profile_id);
 CREATE UNIQUE INDEX users_single_house_owner_idx ON users ((is_house_owner)) WHERE is_house_owner = TRUE;
 CREATE INDEX ON schedules (setting_profile_id);
 CREATE INDEX ON schedules (device_id);
-CREATE INDEX ON alerts (device_id);
+CREATE INDEX ON alerts (feed_key);
 CREATE INDEX ON sensor_data (device_id, timestamp DESC) WHERE device_id IS NOT NULL;
 CREATE INDEX ON sensor_data (sensor_id, timestamp DESC) WHERE sensor_id IS NOT NULL;
 CREATE INDEX sensor_data_reading_idx ON sensor_data USING GIN (reading);

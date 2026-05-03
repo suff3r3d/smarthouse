@@ -55,14 +55,16 @@ The middleware accepts JWT from:
 | GET | `/api/schedules/{schedule_id}` | Get one schedule | **Body (optional for auth):** `{ "auth_token": "string" }` | `success=true` -> `data` schedule object |
 | PUT | `/api/schedules/{schedule_id}` | Update one schedule | **Body:** `{ "auth_token": "string", "setting_profile_id"?: 1, "device_id"?: 1, "action"?: "TURN_ON" \| "TURN_OFF" \| "SET_VALUE", "payload"?: { ... }, "trigger_time"?: "YYYY-MM-DDTHH:MM:SS" }` | `success=true` -> `data` updated schedule |
 
-## 7. System & Alerts
+## 7. Alerts
 | Method | Endpoint | Description | Parameters / Body | Response Format |
 |--------|----------|-------------|-------------------|-----------------|
-| GET | `/api/system/mode` | Get system mode (stub) | None | Stub; currently returns failure or empty success wrapper depending implementation |
-| GET | `/api/alerts` | List alerts (stub) | None | Stub; currently returns failure or empty success wrapper depending implementation |
+| GET | `/api/alerts/list` | List alerts from database | **Query (optional):** `since` (ISO datetime, e.g. `2026-05-03T07:30:00Z`) | `success=true` -> `data.alerts`, `data.count` |
 
 ## Notes
 - Device polling worker syncs latest Adafruit feed values into both `devices` and `sensors` tables by `feed_key`.
 - Sensors are read-only; device mutation is limited to controllable feeds (`door`, `lb1`, `pir`, `rgb`, `light-pwm`).
 - DB init seeds a default `admin` user with password `admin` (bcrypt hash in `db/init/init.sql`).
 - Several endpoints are route stubs (`pass`) and are listed to reflect what is currently coded.
+
+# Notes
+Them loai alert (type: (warining), title, msg, timestamp (hour, minute, second, day))

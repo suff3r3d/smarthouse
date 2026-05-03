@@ -155,6 +155,74 @@ def get_setting_profile_ids_by_user_id(user_id: int) -> list[int]:
         return [row[0] for row in rows]
 
 
+def get_admin_alert_thresholds() -> dict[str, float | None]:
+    """
+    Return alert thresholds from the house owner's setting profile.
+    Assumes single-owner/single-profile deployment but degrades safely.
+    """
+    default_temp = 35.0
+    default_temp_lower = 15.0
+    default_gas = 800.0
+
+    with Session(_require_engine()) as session:
+        profile_columns = _get_table_columns(session, "setting_profiles")
+        has_temp_lower = "temp_lower_threshold" in profile_columns
+        has_temp_upper = "temp_upper_threshold" in profile_columns
+        has_gas_upper = "gas_upper_threshold" in profile_columns
+
+        temp_lower_expr = "sp.temp_lower_threshold AS temp_lower_threshold" if has_temp_lower else "NULL AS temp_lower_threshold"
+        temp_expr = "sp.temp_upper_threshold AS temp_upper_threshold" if has_temp_upper else "NULL AS temp_upper_threshold"
+        gas_expr = "sp.gas_upper_threshold AS gas_upper_threshold" if has_gas_upper else "NULL AS gas_upper_threshold"
+
+        row = session.execute(
+            text(
+                f"""
+                SELECT
+                    {temp_lower_expr},
+                    {temp_expr},
+                    {gas_expr}
+                FROM users u
+                JOIN setting_profiles sp
+                  ON sp.user_id = u.id
+                WHERE u.is_house_owner = TRUE
+                ORDER BY
+                    CASE WHEN u.current_setting_profile_id = sp.id THEN 0 ELSE 1 END,
+                    sp.id ASC
+                LIMIT 1
+                """
+            )
+        ).mappings().first()
+
+        temp_lower_threshold = default_temp_lower
+        temp_threshold = default_temp
+        gas_threshold = default_gas
+
+        if row:
+            try:
+                if row.get("temp_lower_threshold") is not None:
+                    temp_lower_threshold = float(row.get("temp_lower_threshold"))
+            except (TypeError, ValueError):
+                pass
+
+            try:
+                if row.get("temp_upper_threshold") is not None:
+                    temp_threshold = float(row.get("temp_upper_threshold"))
+            except (TypeError, ValueError):
+                pass
+
+            try:
+                if row.get("gas_upper_threshold") is not None:
+                    gas_threshold = float(row.get("gas_upper_threshold"))
+            except (TypeError, ValueError):
+                pass
+
+        return {
+            "temp_lower_threshold": temp_lower_threshold,
+            "temp_upper_threshold": temp_threshold,
+            "gas_upper_threshold": gas_threshold,
+        }
+
+
 def get_sensor_value_by_feed_key(sensor_feed_key: str) -> Optional[Any]:
     with Session(_require_engine()) as session:
         sensor_columns = _get_table_columns(session, "sensors")
@@ -251,6 +319,124 @@ def get_device_value_by_feed_key(device_feed_key: str) -> Optional[Any]:
         if not row:
             return None
         return row[0]
+
+
+def list_alerts(limit: int = 100, since: Optional[datetime] = None) -> list[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        alert_columns = _get_table_columns(session, "alerts")
+        has_alert_type = "alert_type" in alert_columns
+        has_feed_key = "feed_key" in alert_columns
+
+        select_alert_type = "a.alert_type AS alert_type" if has_alert_type else "'WARNING' AS alert_type"
+        select_feed_key = "a.feed_key AS feed_key" if has_feed_key else "NULL AS feed_key"
+        where_clause = "WHERE a.created_at > :since" if since is not None else ""
+        params = {"limit": limit}
+        if since is not None:
+            params["since"] = since
+        rows = session.execute(
+            text(
+                f"""
+                SELECT
+                    {select_alert_type},
+                    {select_feed_key},
+                    a.message,
+                    a.created_at
+                FROM alerts a
+                {where_clause}
+                ORDER BY a.created_at DESC
+                LIMIT :limit
+                """
+            ),
+            params,
+        ).mappings().all()
+
+        result = []
+        for row in rows:
+            feed_key = row.get("feed_key")
+            title = f"Alert from {feed_key}" if feed_key else "System Alert"
+            result.append(
+                {
+                    "type": row.get("alert_type") or "WARNING",
+                    "title": title,
+                    "msg": row.get("message"),
+                    "timestamp": row.get("created_at"),
+                    "feed_key": feed_key,
+                }
+            )
+        return result
+
+
+def create_alert(
+    *,
+    alert_type: str,
+    message: str,
+    feed_key: Optional[str] = None,
+) -> None:
+    with Session(_require_engine()) as session:
+        alert_columns = _get_table_columns(session, "alerts")
+        has_alert_type = "alert_type" in alert_columns
+        has_feed_key = "feed_key" in alert_columns
+
+        if feed_key:
+            if has_feed_key and has_alert_type:
+                session.execute(
+                    text(
+                        """
+                        INSERT INTO alerts (alert_type, feed_key, message)
+                        VALUES (:alert_type, :feed_key, :message)
+                        """
+                    ),
+                    {
+                        "alert_type": alert_type,
+                        "feed_key": feed_key,
+                        "message": message,
+                    },
+                )
+            elif has_feed_key:
+                session.execute(
+                    text(
+                        """
+                        INSERT INTO alerts (feed_key, message)
+                        VALUES (:feed_key, :message)
+                        """
+                    ),
+                    {
+                        "feed_key": feed_key,
+                        "message": message,
+                    },
+                )
+            else:
+                raise Exception("alerts.feed_key column is required")
+        else:
+            if has_feed_key and has_alert_type:
+                session.execute(
+                    text(
+                        """
+                        INSERT INTO alerts (alert_type, feed_key, message)
+                        VALUES (:alert_type, NULL, :message)
+                        """
+                    ),
+                    {
+                        "alert_type": alert_type,
+                        "message": message,
+                    },
+                )
+            elif has_feed_key:
+                session.execute(
+                    text(
+                        """
+                        INSERT INTO alerts (feed_key, message)
+                        VALUES (NULL, :message)
+                        """
+                    ),
+                    {
+                            "message": message,
+                    },
+                )
+            else:
+                raise Exception("alerts.feed_key column is required")
+
+        session.commit()
 
 
 def _parse_adafruit_time(value: Optional[str]) -> Optional[datetime]:
