@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -11,9 +9,10 @@ services:
       AIO_KEY: ${AIO_KEY}
       JWT_SECRET: ${JWT_SECRET}
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
       - ./backend:/app
+      - ./root.crt:/root/.postgresql/root.crt:ro
 
 volumes:
   postgres_data:
