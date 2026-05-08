@@ -31,15 +31,15 @@ A FastAPI backend for a smart home system that integrates with Adafruit IO to co
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | FastAPI (Python 3.12) |
-| Server | Uvicorn (ASGI) |
-| ORM | SQLAlchemy 2.0 (async) |
-| Database | PostgreSQL (TLS via `root.crt`) |
-| Auth | JWT (HS256, 30 min expiry) |
-| IoT Integration | Adafruit IO REST API |
-| Deployment | Docker + Docker Compose |
+| Layer           | Technology                      |
+| --------------- | ------------------------------- |
+| Framework       | FastAPI (Python 3.12)           |
+| Server          | Uvicorn (ASGI)                  |
+| ORM             | SQLAlchemy 2.0 (async)          |
+| Database        | PostgreSQL (TLS via `root.crt`) |
+| Auth            | JWT (HS256, 30 min expiry)      |
+| IoT Integration | Adafruit IO REST API            |
+| Deployment      | Docker + Docker Compose         |
 
 ---
 
@@ -62,17 +62,17 @@ AIO_KEY=your_adafruit_io_key
 JWT_SECRET=a-long-random-secret-string
 ```
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string (asyncpg driver) | Yes |
-| `AIO_USERNAME` | Adafruit IO account username | Yes |
-| `AIO_KEY` | Adafruit IO API key | Yes |
-| `JWT_SECRET` | Secret key for signing JWT tokens | Yes |
+| Variable       | Description                                   | Required |
+| -------------- | --------------------------------------------- | -------- |
+| `DATABASE_URL` | PostgreSQL connection string (asyncpg driver) | Yes      |
+| `AIO_USERNAME` | Adafruit IO account username                  | Yes      |
+| `AIO_KEY`      | Adafruit IO API key                           | Yes      |
+| `JWT_SECRET`   | Secret key for signing JWT tokens             | Yes      |
 
 ### Running with Docker
 
 ```bash
-docker-compose up --build
+docker compose up --build t
 ```
 
 The API will be available at `http://localhost:8001`.
@@ -102,16 +102,19 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 The API uses **JWT Bearer tokens**. Obtain a token by calling `POST /api/auth/login`, then pass it with subsequent requests in one of three ways:
 
 **Option 1 — Authorization header (preferred):**
+
 ```http
 Authorization: Bearer <token>
 ```
 
 **Option 2 — Custom header:**
+
 ```http
 auth-token: <token>
 ```
 
 **Option 3 — Request body field (for select endpoints):**
+
 ```json
 { "auth_token": "<token>" }
 ```
@@ -120,11 +123,11 @@ Tokens expire after **30 minutes**.
 
 ### Authorization Levels
 
-| Level | Who | Capabilities |
-|-------|-----|--------------|
-| Public | Anyone | Register, login, list devices/sensors |
-| Authenticated | Any valid JWT user | Get sensor/device values, read own schedules |
-| House Owner | User with `is_house_owner: true` | Create and update schedules |
+| Level         | Who                              | Capabilities                                 |
+| ------------- | -------------------------------- | -------------------------------------------- |
+| Public        | Anyone                           | Register, login, list devices/sensors        |
+| Authenticated | Any valid JWT user               | Get sensor/device values, read own schedules |
+| House Owner   | User with `is_house_owner: true` | Create and update schedules                  |
 
 ---
 
@@ -148,35 +151,47 @@ Base URL: `http://localhost:8001`
 ### Health & Utility
 
 #### `GET /`
+
 Server health check.
 
 **Response `200`:**
+
 ```json
-{ "success": true, "data": { "message": "Smart House FastAPI server is running!" } }
+{
+  "success": true,
+  "data": { "message": "Smart House FastAPI server is running!" }
+}
 ```
 
 ---
 
 #### `GET /get-user-by-username`
+
 Look up a user by their username.
 
 **Query Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter  | Type   | Description         |
+| ---------- | ------ | ------------------- |
 | `username` | string | Username to look up |
 
 **Response `200`:**
+
 ```json
-{ "success": true, "data": { "id": 1, "username": "alice", "is_house_owner": true } }
+{
+  "success": true,
+  "data": { "id": 1, "username": "alice", "is_house_owner": true }
+}
 ```
 
 ---
 
 #### `GET /api/hello`
+
 API router health check.
 
 **Response `200`:**
+
 ```json
 { "success": true, "data": { "message": "Hello from the API router!" } }
 ```
@@ -186,9 +201,11 @@ API router health check.
 ### Authentication Endpoints
 
 #### `POST /api/auth/register`
+
 Register a new user account.
 
 **Request Body:**
+
 ```json
 {
   "username": "alice",
@@ -197,26 +214,30 @@ Register a new user account.
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `username` | string | Yes | Unique username |
-| `password` | string | Yes | Plaintext password (hashed with bcrypt) |
-| `is_house_owner` | boolean | No | Defaults to `false` |
+| Field            | Type    | Required | Description                             |
+| ---------------- | ------- | -------- | --------------------------------------- |
+| `username`       | string  | Yes      | Unique username                         |
+| `password`       | string  | Yes      | Plaintext password (hashed with bcrypt) |
+| `is_house_owner` | boolean | No       | Defaults to `false`                     |
 
 **Response `200`:**
+
 ```json
 { "success": true, "data": { "message": "User registered successfully" } }
 ```
 
 **Errors:**
+
 - `400` — Username already exists
 
 ---
 
 #### `POST /api/auth/login`
+
 Authenticate a user and receive a JWT token.
 
 **Request Body:**
+
 ```json
 {
   "username": "alice",
@@ -225,6 +246,7 @@ Authenticate a user and receive a JWT token.
 ```
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -236,6 +258,7 @@ Authenticate a user and receive a JWT token.
 ```
 
 **Errors:**
+
 - `401` — Invalid username or password
 
 ---
@@ -243,6 +266,7 @@ Authenticate a user and receive a JWT token.
 ### Users
 
 #### `GET /api/users`
+
 List all users.
 
 > **Status: Not yet implemented (stub).**
@@ -256,11 +280,13 @@ Sensors are **read-only** feeds pulled from Adafruit IO and cached in the databa
 ---
 
 #### `GET /api/sensors`
+
 List all sensor feeds and their latest cached values from the database.
 
 **Auth:** Not required
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -281,22 +307,25 @@ List all sensor feeds and their latest cached values from the database.
 ---
 
 #### `GET /api/sensors/{sensor_id}/get_value`
+
 Get the current cached value of a specific sensor.
 
 **Auth:** Required (JWT via header or body)
 
 **Path Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter   | Type   | Description                                      |
+| ----------- | ------ | ------------------------------------------------ |
 | `sensor_id` | string | Sensor feed key (e.g. `temperature`, `humidity`) |
 
 **Response `200`:**
+
 ```json
 { "success": true, "data": "28.00" }
 ```
 
 **Errors:**
+
 - `400` — `sensor_id` is not a valid sensor feed key
 - `401` — Missing or invalid token
 - `404` — No stored value found for this sensor
@@ -304,6 +333,7 @@ Get the current cached value of a specific sensor.
 ---
 
 #### `GET /api/sensors/latest`
+
 Get the latest reading for all sensors.
 
 > **Status: Not yet implemented (stub).**
@@ -311,6 +341,7 @@ Get the latest reading for all sensors.
 ---
 
 #### `GET /api/sensors/history`
+
 Get historical readings for sensors.
 
 > **Status: Not yet implemented (stub).**
@@ -318,6 +349,7 @@ Get historical readings for sensors.
 ---
 
 #### `GET /api/sensors/export`
+
 Export sensor history as a file (e.g. CSV).
 
 > **Status: Not yet implemented (stub).**
@@ -331,11 +363,13 @@ Devices are **controllable** feeds on Adafruit IO. Supported device feed keys: `
 ---
 
 #### `GET /api/devices`
+
 List all controllable device feeds and their current cached states.
 
 **Auth:** Not required
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -356,27 +390,31 @@ List all controllable device feeds and their current cached states.
 ---
 
 #### `POST /api/devices/{device_id}/get_state`
+
 Get the current cached state of a specific device.
 
 **Auth:** Required (JWT in body)
 
 **Path Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter   | Type   | Description                          |
+| ----------- | ------ | ------------------------------------ |
 | `device_id` | string | Device feed key (e.g. `lb1`, `door`) |
 
 **Request Body:**
+
 ```json
 { "auth_token": "<jwt-token>" }
 ```
 
 **Response `200`:**
+
 ```json
 { "success": true, "data": "ON" }
 ```
 
 **Errors:**
+
 - `400` — `device_id` is not a controllable device feed
 - `401` — Missing or invalid token
 - `404` — No stored value found for this device
@@ -384,17 +422,19 @@ Get the current cached state of a specific device.
 ---
 
 #### `POST /api/devices/{device_id}/set_state`
+
 Set the state of a specific device by publishing to its Adafruit IO feed.
 
 **Auth:** Required (JWT in body)
 
 **Path Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter   | Type   | Description                          |
+| ----------- | ------ | ------------------------------------ |
 | `device_id` | string | Device feed key (e.g. `lb1`, `door`) |
 
 **Request Body:**
+
 ```json
 {
   "auth_token": "<jwt-token>",
@@ -402,12 +442,13 @@ Set the state of a specific device by publishing to its Adafruit IO feed.
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `auth_token` | string | JWT token |
-| `state` | string \| number \| boolean \| object | New value to publish to the device feed |
+| Field        | Type                                  | Description                             |
+| ------------ | ------------------------------------- | --------------------------------------- |
+| `auth_token` | string                                | JWT token                               |
+| `state`      | string \| number \| boolean \| object | New value to publish to the device feed |
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -421,6 +462,7 @@ Set the state of a specific device by publishing to its Adafruit IO feed.
 ```
 
 **Errors:**
+
 - `400` — `device_id` is not a controllable device feed
 - `401` — Missing or invalid token
 - `502` — Adafruit IO unavailable
@@ -434,17 +476,19 @@ Schedules automate device actions at a specific time. Schedules belong to a **se
 ---
 
 #### `GET /api/schedules`
+
 List all schedules for the authenticated user's setting profiles.
 
 **Auth:** Required (JWT via header or body)
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `device_id` | integer | No | Filter schedules by device ID |
+| Parameter   | Type    | Required | Description                   |
+| ----------- | ------- | -------- | ----------------------------- |
+| `device_id` | integer | No       | Filter schedules by device ID |
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -464,11 +508,13 @@ List all schedules for the authenticated user's setting profiles.
 ---
 
 #### `POST /api/schedules`
+
 Create a new schedule.
 
 **Auth:** Required (JWT, house owner only)
 
 **Request Body:**
+
 ```json
 {
   "setting_profile_id": 2,
@@ -479,15 +525,16 @@ Create a new schedule.
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `setting_profile_id` | integer | Yes | ID of the setting profile this schedule belongs to |
-| `device_id` | integer | Yes | ID of the device to act on |
-| `action` | string | Yes | One of: `TURN_ON`, `TURN_OFF`, `SET_VALUE` |
-| `payload` | object | No | Extra metadata for the action (e.g. brightness value) |
-| `trigger_time` | datetime | Yes | When to execute the action (ISO 8601) |
+| Field                | Type     | Required | Description                                           |
+| -------------------- | -------- | -------- | ----------------------------------------------------- |
+| `setting_profile_id` | integer  | Yes      | ID of the setting profile this schedule belongs to    |
+| `device_id`          | integer  | Yes      | ID of the device to act on                            |
+| `action`             | string   | Yes      | One of: `TURN_ON`, `TURN_OFF`, `SET_VALUE`            |
+| `payload`            | object   | No       | Extra metadata for the action (e.g. brightness value) |
+| `trigger_time`       | datetime | Yes      | When to execute the action (ISO 8601)                 |
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -503,6 +550,7 @@ Create a new schedule.
 ```
 
 **Errors:**
+
 - `400` — Invalid schedule payload
 - `401` — Missing or invalid token
 - `403` — User is not the house owner
@@ -511,17 +559,19 @@ Create a new schedule.
 ---
 
 #### `GET /api/schedules/{schedule_id}`
+
 Get a single schedule by ID.
 
 **Auth:** Required (JWT via header or body)
 
 **Path Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter     | Type    | Description |
+| ------------- | ------- | ----------- |
 | `schedule_id` | integer | Schedule ID |
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -537,6 +587,7 @@ Get a single schedule by ID.
 ```
 
 **Errors:**
+
 - `401` — Missing or invalid token
 - `403` — Schedule does not belong to this user
 - `404` — Schedule not found
@@ -544,17 +595,19 @@ Get a single schedule by ID.
 ---
 
 #### `PUT /api/schedules/{schedule_id}`
+
 Update an existing schedule. All body fields are optional.
 
 **Auth:** Required (JWT, house owner only)
 
 **Path Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter     | Type    | Description |
+| ------------- | ------- | ----------- |
 | `schedule_id` | integer | Schedule ID |
 
 **Request Body:**
+
 ```json
 {
   "action": "TURN_OFF",
@@ -565,6 +618,7 @@ Update an existing schedule. All body fields are optional.
 **Response `200`:** Updated schedule object (same shape as `GET /api/schedules/{schedule_id}`).
 
 **Errors:**
+
 - `401` — Missing or invalid token
 - `403` — User is not the house owner
 - `403` — Schedule or new `setting_profile_id` does not belong to this user
@@ -575,6 +629,7 @@ Update an existing schedule. All body fields are optional.
 ### System & Alerts
 
 #### `GET /api/system/mode`
+
 Get the current system mode (e.g. Home / Away).
 
 > **Status: Not yet implemented (stub).**
@@ -582,17 +637,19 @@ Get the current system mode (e.g. Home / Away).
 ---
 
 #### `GET /api/alerts/list`
+
 List recent system alerts.
 
 **Auth:** Not required
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `since` | datetime (ISO 8601) | No | Only return alerts created after this timestamp (e.g. `2026-05-03T07:30:00Z`) |
+| Parameter | Type                | Required | Description                                                                   |
+| --------- | ------------------- | -------- | ----------------------------------------------------------------------------- |
+| `since`   | datetime (ISO 8601) | No       | Only return alerts created after this timestamp (e.g. `2026-05-03T07:30:00Z`) |
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -617,6 +674,7 @@ List recent system alerts.
 ## Data Models
 
 ### User
+
 ```
 id                          integer (PK)
 username                    string (unique)
@@ -626,6 +684,7 @@ current_setting_profile_id  integer (FK → setting_profiles)
 ```
 
 ### Setting Profile
+
 ```
 id                   integer (PK)
 user_id              integer (FK → users, cascade delete)
@@ -636,6 +695,7 @@ away_mode            boolean
 ```
 
 ### Device
+
 ```
 id               integer (PK)
 feed_key         string (unique) — Adafruit IO feed key
@@ -647,6 +707,7 @@ last_record_time timestamp
 ```
 
 ### Sensor
+
 ```
 id               integer (PK)
 feed_key         string (unique) — Adafruit IO feed key
@@ -657,6 +718,7 @@ last_recorded_at timestamp
 ```
 
 ### Schedule
+
 ```
 id                   integer (PK)
 setting_profile_id   integer (FK → setting_profiles, cascade delete)
@@ -667,6 +729,7 @@ trigger_time         timestamp
 ```
 
 ### Alert
+
 ```
 id          integer (PK)
 device_id   integer (FK → devices, nullable)
@@ -684,23 +747,23 @@ A default `admin` account is seeded with password `admin` (bcrypt-hashed).
 
 **Pre-seeded devices** (mapped to Adafruit IO feeds):
 
-| Feed Key | Name | Type |
-|----------|------|------|
-| `door` | Front Door | DOOR |
-| `lb1` | Light Bulb 1 | LIGHT |
-| `light-pwm` | Dimmer Light | DIMMER |
-| `pir` | Motion Sensor | MOTION |
-| `rgb` | RGB Light | RGB |
+| Feed Key    | Name          | Type   |
+| ----------- | ------------- | ------ |
+| `door`      | Front Door    | DOOR   |
+| `lb1`       | Light Bulb 1  | LIGHT  |
+| `light-pwm` | Dimmer Light  | DIMMER |
+| `pir`       | Motion Sensor | MOTION |
+| `rgb`       | RGB Light     | RGB    |
 
 **Pre-seeded sensors** (mapped to Adafruit IO feeds):
 
-| Feed Key | Name | Type |
-|----------|------|------|
+| Feed Key      | Name        | Type        |
+| ------------- | ----------- | ----------- |
 | `temperature` | Temperature | TEMPERATURE |
-| `humidity` | Humidity | HUMIDITY |
-| `rain` | Rain | RAIN |
-| `gas` | Gas | GAS |
-| `themis` | Themis | GENERIC |
+| `humidity`    | Humidity    | HUMIDITY    |
+| `rain`        | Rain        | RAIN        |
+| `gas`         | Gas         | GAS         |
+| `themis`      | Themis      | GENERIC     |
 
 ---
 
@@ -714,6 +777,7 @@ All real-time device and sensor data flows through the [Adafruit IO REST API](ht
 The backend polls all device and sensor feeds every **60 seconds** in a background thread (`device_polling_worker`) to keep the local database state current.
 
 **Operations:**
+
 - `publish_feed(feed_key, value)` — Write a new value to a device feed
 - `get_feed_value(feed_key)` — Read the latest value from any feed
 - `get_feed_history(feed_key, limit=30)` — Retrieve up to 30 historical data points
@@ -723,12 +787,12 @@ The backend polls all device and sensor feeds every **60 seconds** in a backgrou
 
 ## Error Codes
 
-| Code | Meaning |
-|------|---------|
-| `400` | Bad request — invalid input or constraint violation |
-| `401` | Unauthorized — missing or expired JWT token |
-| `403` | Forbidden — insufficient permissions |
-| `404` | Not found — resource does not exist |
+| Code  | Meaning                                               |
+| ----- | ----------------------------------------------------- |
+| `400` | Bad request — invalid input or constraint violation   |
+| `401` | Unauthorized — missing or expired JWT token           |
+| `403` | Forbidden — insufficient permissions                  |
+| `404` | Not found — resource does not exist                   |
 | `422` | Unprocessable entity — request body validation failed |
-| `500` | Internal server error |
-| `502` | Bad gateway — Adafruit IO is unreachable |
+| `500` | Internal server error                                 |
+| `502` | Bad gateway — Adafruit IO is unreachable              |
