@@ -244,6 +244,33 @@ def get_sensor_value_by_feed_key(sensor_feed_key: str) -> Optional[Any]:
         return row[0]
 
 
+def get_sensor_timeseries(
+    *,
+    feed_key: str,
+    start_time: datetime,
+    end_time: datetime,
+) -> list[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        rows = session.execute(
+            text(
+                """
+                SELECT timestamp, value
+                FROM sensor_data
+                WHERE feed_key = :feed_key
+                  AND timestamp >= :start_time
+                  AND timestamp <= :end_time
+                ORDER BY timestamp ASC
+                """
+            ),
+            {
+                "feed_key": feed_key,
+                "start_time": start_time,
+                "end_time": end_time,
+            },
+        ).mappings().all()
+        return [dict(row) for row in rows]
+
+
 def list_sensors_from_db() -> list[dict[str, Any]]:
     with Session(_require_engine()) as session:
         sensor_columns = _get_table_columns(session, "sensors")
@@ -475,6 +502,8 @@ def sync_feed_latest_values(feeds: list[dict[str, Any]]) -> None:
     with Session(_require_engine()) as session:
         device_columns = _get_table_columns(session, "devices")
         sensor_columns = _get_table_columns(session, "sensors")
+        sensor_data_columns = _get_table_columns(session, "sensor_data")
+        has_sensor_data_table = bool(sensor_data_columns)
 
         device_value_col = "value" if "value" in device_columns else (
             "current_value" if "current_value" in device_columns else None
@@ -562,6 +591,20 @@ def sync_feed_latest_values(feeds: list[dict[str, Any]]) -> None:
                             UPDATE sensors
                             SET {sensor_value_col} = :value
                             WHERE feed_key = :feed_key
+                            """
+                        ),
+                        {
+                            "feed_key": feed_key,
+                            "value": str(latest_value),
+                        },
+                    )
+
+                if has_sensor_data_table:
+                    session.execute(
+                        text(
+                            """
+                            INSERT INTO sensor_data (timestamp, feed_key, value)
+                            VALUES (NOW(), :feed_key, :value)
                             """
                         ),
                         {

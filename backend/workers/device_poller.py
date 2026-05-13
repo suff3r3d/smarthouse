@@ -80,5 +80,5 @@ def device_polling_worker(stop_event: threading.Event) -> None:
                 print(f"{device_name}: {device.get('last_data')}", flush=True)
         except Exception as exc:
             logger.exception("Device polling error: %s", exc)
-        stop_event.wait(60)
+        stop_event.wait(5)
     print("[device-poller] stopped", flush=True)

@@ -74,16 +74,10 @@ CREATE TABLE alerts (
 );
 
 CREATE TABLE sensor_data (
-    id SERIAL PRIMARY KEY,
-    device_id INTEGER REFERENCES devices(id) ON DELETE CASCADE,
-    sensor_id INTEGER REFERENCES sensors(id) ON DELETE CASCADE,
-    reading JSONB NOT NULL,
+    id BIGSERIAL PRIMARY KEY,
     timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT sensor_data_source_check CHECK (
-        (device_id IS NOT NULL AND sensor_id IS NULL)
-        OR
-        (device_id IS NULL AND sensor_id IS NOT NULL)
-    )
+    feed_key VARCHAR(100) NOT NULL,
+    value TEXT NOT NULL
 );
 
 ALTER TABLE users
@@ -96,9 +90,7 @@ CREATE UNIQUE INDEX users_single_house_owner_idx ON users ((is_house_owner)) WHE
 CREATE INDEX ON schedules (setting_profile_id);
 CREATE INDEX ON schedules (device_id);
 CREATE INDEX ON alerts (feed_key);
-CREATE INDEX ON sensor_data (device_id, timestamp DESC) WHERE device_id IS NOT NULL;
-CREATE INDEX ON sensor_data (sensor_id, timestamp DESC) WHERE sensor_id IS NOT NULL;
-CREATE INDEX sensor_data_reading_idx ON sensor_data USING GIN (reading);
+CREATE INDEX ON sensor_data (feed_key, timestamp DESC);
 
 -- Seed default admin account (admin:admin).
 INSERT INTO users (username, password_hash, is_house_owner) VALUES

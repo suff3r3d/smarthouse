@@ -74,7 +74,7 @@ async def set_device_state(device_id: str, payload: DeviceSetStatePayload):
         )
 
 
-@router.post("/devices/{device_id}/get_state", summary="Get Device State")
+@router.get("/devices/{device_id}/get_state", summary="Get Device State")
 async def get_device_state(device_id: str, payload: DeviceAuthPayload):
     """
     Get only the current state value of a device feed.

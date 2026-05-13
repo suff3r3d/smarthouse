@@ -1,8 +1,12 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 import database
 from routes.deps import require_auth
 from routes.feed_types import SENSOR_FEEDS, is_sensor_feed
+from utils import JWTHandler
 
 router = APIRouter()
 
@@ -21,6 +25,17 @@ async def list_sensors():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch sensors from database: {exc}",
         )
+
+
+class SensorAuthPayload(BaseModel):
+    auth_token: str
+
+
+class SensorHistoryPayload(BaseModel):
+    auth_token: str
+    feed_key: str
+    start_time: datetime
+    end_time: datetime
 
 
 @router.get("/sensors/{sensor_id}/get_value", summary="Get Sensor Value")
@@ -51,12 +66,42 @@ async def get_latest_sensor_data():
     pass
 
 
-@router.get("/sensors/history", summary="Get Historical Sensor Data")
-async def get_sensor_history():
+@router.post("/sensors/history", summary="Get Historical Sensor Data")
+async def get_sensor_history(payload: SensorHistoryPayload):
     """
     Get historical sensor data with time-based filtering.
     """
-    pass
+    decoded = JWTHandler.decode(payload.auth_token)
+    if not decoded:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid auth token",
+        )
+
+    if not is_sensor_feed(payload.feed_key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{payload.feed_key}' is not a sensor feed",
+        )
+
+    if payload.start_time > payload.end_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_time must be less than or equal to end_time",
+        )
+
+    try:
+        data = database.get_sensor_timeseries(
+            feed_key=payload.feed_key,
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+        )
+        return data
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch sensor history: {exc}",
+        )
 
 
 @router.get("/sensors/export", summary="Export Historical Data")
