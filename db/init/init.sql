@@ -31,7 +31,10 @@ CREATE TABLE setting_profiles (
     name VARCHAR(100) NOT NULL,
     temp_lower_threshold FLOAT DEFAULT 15.0,
     temp_upper_threshold FLOAT DEFAULT 35.0,
+    humidity_lower_threshold FLOAT DEFAULT 30.0,
+    humidity_upper_threshold FLOAT DEFAULT 70.0,
     gas_upper_threshold FLOAT DEFAULT 800.0,
+    light_lower_threshold FLOAT DEFAULT 20.0,
     away_mode BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(user_id, name)
 );
@@ -51,6 +54,7 @@ CREATE TABLE sensors (
     feed_key VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(100) UNIQUE NOT NULL,
     type sensor_type NOT NULL,
+    unit VARCHAR(32),
     current_value TEXT,
     last_recorded_at TIMESTAMPTZ
 );
@@ -103,6 +107,14 @@ FROM users
 WHERE username = 'admin'
 ON CONFLICT (user_id, name) DO NOTHING;
 
+-- Point admin to its default setting profile.
+UPDATE users u
+SET current_setting_profile_id = sp.id
+FROM setting_profiles sp
+WHERE u.username = 'admin'
+  AND sp.user_id = u.id
+  AND sp.name = 'Default';
+
 -- Seed from current Adafruit feed list:
 -- Devices (controllable): door, lb1, light-pwm, pir, rgb
 INSERT INTO devices (feed_key, name, type, status, value, last_record_time) VALUES
@@ -113,9 +125,9 @@ INSERT INTO devices (feed_key, name, type, status, value, last_record_time) VALU
     ('rgb', 'RGB', 'RGB', 'ONLINE', '15', '2026-04-16T09:05:09Z');
 
 -- Sensors (read-only): temperature, humidity, rain, gas, themis
-INSERT INTO sensors (feed_key, name, type, current_value, last_recorded_at) VALUES
-    ('temperature', 'temperature', 'TEMPERATURE', '28.00', '2026-04-13T06:14:57Z'),
-    ('humidity', 'humidity', 'HUMIDITY', '45', '2026-04-13T06:14:58Z'),
-    ('rain', 'rain', 'RAIN', '716', '2026-04-13T06:14:58Z'),
-    ('gas', 'gas', 'GAS', '820', '2026-04-13T06:14:58Z'),
-    ('themis', 'themis', 'LIGHT_INTENSITY', '82', '2026-04-13T06:14:58Z');
+INSERT INTO sensors (feed_key, name, type, unit, current_value, last_recorded_at) VALUES
+    ('temperature', 'temperature', 'TEMPERATURE', '°C', '28.00', '2026-04-13T06:14:57Z'),
+    ('humidity', 'humidity', 'HUMIDITY', '%', '45', '2026-04-13T06:14:58Z'),
+    ('rain', 'rain', 'RAIN', 'raw', '716', '2026-04-13T06:14:58Z'),
+    ('gas', 'gas', 'GAS', 'ppm', '820', '2026-04-13T06:14:58Z'),
+    ('themis', 'themis', 'LIGHT_INTENSITY', '%', '82', '2026-04-13T06:14:58Z');

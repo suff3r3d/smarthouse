@@ -181,6 +181,90 @@ def get_current_setting_profile_id_by_user_id(user_id: int) -> Optional[int]:
         return row[0]
 
 
+def get_setting_profile_thresholds(setting_profile_id: int) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        row = session.execute(
+            text(
+                """
+                SELECT
+                    id AS setting_profile_id,
+                    temp_lower_threshold,
+                    temp_upper_threshold,
+                    humidity_lower_threshold,
+                    humidity_upper_threshold,
+                    gas_upper_threshold,
+                    light_lower_threshold
+                FROM setting_profiles
+                WHERE id = :setting_profile_id
+                LIMIT 1
+                """
+            ),
+            {"setting_profile_id": setting_profile_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def update_setting_profile_thresholds(
+    *,
+    setting_profile_id: int,
+    temp_lower_threshold: Optional[float] = None,
+    temp_upper_threshold: Optional[float] = None,
+    humidity_lower_threshold: Optional[float] = None,
+    humidity_upper_threshold: Optional[float] = None,
+    gas_upper_threshold: Optional[float] = None,
+    light_lower_threshold: Optional[float] = None,
+) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        updates: dict[str, Any] = {}
+        if temp_lower_threshold is not None:
+            updates["temp_lower_threshold"] = temp_lower_threshold
+        if temp_upper_threshold is not None:
+            updates["temp_upper_threshold"] = temp_upper_threshold
+        if humidity_lower_threshold is not None:
+            updates["humidity_lower_threshold"] = humidity_lower_threshold
+        if humidity_upper_threshold is not None:
+            updates["humidity_upper_threshold"] = humidity_upper_threshold
+        if gas_upper_threshold is not None:
+            updates["gas_upper_threshold"] = gas_upper_threshold
+        if light_lower_threshold is not None:
+            updates["light_lower_threshold"] = light_lower_threshold
+
+        if updates:
+            set_clause = ", ".join([f"{col} = :{col}" for col in updates.keys()])
+            params = {"setting_profile_id": setting_profile_id, **updates}
+            session.execute(
+                text(
+                    f"""
+                    UPDATE setting_profiles
+                    SET {set_clause}
+                    WHERE id = :setting_profile_id
+                    """
+                ),
+                params,
+            )
+            session.commit()
+
+        row = session.execute(
+            text(
+                """
+                SELECT
+                    id AS setting_profile_id,
+                    temp_lower_threshold,
+                    temp_upper_threshold,
+                    humidity_lower_threshold,
+                    humidity_upper_threshold,
+                    gas_upper_threshold,
+                    light_lower_threshold
+                FROM setting_profiles
+                WHERE id = :setting_profile_id
+                LIMIT 1
+                """
+            ),
+            {"setting_profile_id": setting_profile_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
 def get_admin_alert_thresholds() -> dict[str, float | None]:
     """
     Return alert thresholds from the house owner's setting profile.
@@ -188,17 +272,26 @@ def get_admin_alert_thresholds() -> dict[str, float | None]:
     """
     default_temp = 35.0
     default_temp_lower = 15.0
+    default_humidity_lower = 30.0
+    default_humidity_upper = 70.0
     default_gas = 800.0
+    default_light_lower = 20.0
 
     with Session(_require_engine()) as session:
         profile_columns = _get_table_columns(session, "setting_profiles")
         has_temp_lower = "temp_lower_threshold" in profile_columns
         has_temp_upper = "temp_upper_threshold" in profile_columns
+        has_humidity_lower = "humidity_lower_threshold" in profile_columns
+        has_humidity_upper = "humidity_upper_threshold" in profile_columns
         has_gas_upper = "gas_upper_threshold" in profile_columns
+        has_light_lower = "light_lower_threshold" in profile_columns
 
         temp_lower_expr = "sp.temp_lower_threshold AS temp_lower_threshold" if has_temp_lower else "NULL AS temp_lower_threshold"
         temp_expr = "sp.temp_upper_threshold AS temp_upper_threshold" if has_temp_upper else "NULL AS temp_upper_threshold"
+        humidity_lower_expr = "sp.humidity_lower_threshold AS humidity_lower_threshold" if has_humidity_lower else "NULL AS humidity_lower_threshold"
+        humidity_upper_expr = "sp.humidity_upper_threshold AS humidity_upper_threshold" if has_humidity_upper else "NULL AS humidity_upper_threshold"
         gas_expr = "sp.gas_upper_threshold AS gas_upper_threshold" if has_gas_upper else "NULL AS gas_upper_threshold"
+        light_lower_expr = "sp.light_lower_threshold AS light_lower_threshold" if has_light_lower else "NULL AS light_lower_threshold"
 
         row = session.execute(
             text(
@@ -206,7 +299,10 @@ def get_admin_alert_thresholds() -> dict[str, float | None]:
                 SELECT
                     {temp_lower_expr},
                     {temp_expr},
-                    {gas_expr}
+                    {humidity_lower_expr},
+                    {humidity_upper_expr},
+                    {gas_expr},
+                    {light_lower_expr}
                 FROM users u
                 JOIN setting_profiles sp
                   ON sp.user_id = u.id
@@ -221,7 +317,10 @@ def get_admin_alert_thresholds() -> dict[str, float | None]:
 
         temp_lower_threshold = default_temp_lower
         temp_threshold = default_temp
+        humidity_lower_threshold = default_humidity_lower
+        humidity_upper_threshold = default_humidity_upper
         gas_threshold = default_gas
+        light_lower_threshold = default_light_lower
 
         if row:
             try:
@@ -242,10 +341,31 @@ def get_admin_alert_thresholds() -> dict[str, float | None]:
             except (TypeError, ValueError):
                 pass
 
+            try:
+                if row.get("humidity_lower_threshold") is not None:
+                    humidity_lower_threshold = float(row.get("humidity_lower_threshold"))
+            except (TypeError, ValueError):
+                pass
+
+            try:
+                if row.get("humidity_upper_threshold") is not None:
+                    humidity_upper_threshold = float(row.get("humidity_upper_threshold"))
+            except (TypeError, ValueError):
+                pass
+
+            try:
+                if row.get("light_lower_threshold") is not None:
+                    light_lower_threshold = float(row.get("light_lower_threshold"))
+            except (TypeError, ValueError):
+                pass
+
         return {
             "temp_lower_threshold": temp_lower_threshold,
             "temp_upper_threshold": temp_threshold,
+            "humidity_lower_threshold": humidity_lower_threshold,
+            "humidity_upper_threshold": humidity_upper_threshold,
             "gas_upper_threshold": gas_threshold,
+            "light_lower_threshold": light_lower_threshold,
         }
 
 
@@ -310,7 +430,13 @@ def list_sensors_from_db() -> list[dict[str, Any]]:
             "last_record_time" if "last_record_time" in sensor_columns else None
         )
 
+        unit_col = "unit" if "unit" in sensor_columns else None
+
         select_cols = ["feed_key", "name", "type"]
+        if unit_col:
+            select_cols.append(f"{unit_col} AS unit")
+        else:
+            select_cols.append("NULL AS unit")
         if value_col:
             select_cols.append(f"{value_col} AS current_value")
         else:

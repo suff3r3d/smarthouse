@@ -151,6 +151,49 @@ Base path: `/api`
     - `403` schedule/profile does not belong to authenticated user
     - `404` schedule not found
 
+### Setting Profiles
+
+- `POST /api/setting-profiles/current/thresholds`
+  - Auth: `auth_token` in request body
+  - Body:
+    ```json
+    {
+      "auth_token": "<jwt>"
+    }
+    ```
+  - Returns thresholds of authenticated user's current setting profile.
+  - Response `data`:
+    - `setting_profile_id`
+    - `temp_lower_threshold`
+    - `temp_upper_threshold`
+    - `humidity_lower_threshold`
+    - `humidity_upper_threshold`
+    - `gas_upper_threshold`
+    - `light_lower_threshold`
+
+- `PUT /api/setting-profiles/current/thresholds`
+  - Auth: `auth_token` in request body
+  - Body (all threshold fields optional):
+    ```json
+    {
+      "auth_token": "<jwt>",
+      "temp_lower_threshold": 15.0,
+      "temp_upper_threshold": 35.0,
+      "humidity_lower_threshold": 30.0,
+      "humidity_upper_threshold": 70.0,
+      "gas_upper_threshold": 800.0,
+      "light_lower_threshold": 20.0
+    }
+    ```
+  - Behavior:
+    - updates only provided fields on current setting profile
+    - validates:
+      - `temp_lower_threshold < temp_upper_threshold`
+      - `humidity_lower_threshold < humidity_upper_threshold`
+      - `gas_upper_threshold >= 0`
+      - `light_lower_threshold >= 0`
+  - Response `data`: full updated thresholds object
+
 ### System & Alerts
 - `GET /api/system/mode` (stub)
 - `GET /api/alerts/list?since=<ISO_DATETIME>`
@@ -165,7 +208,10 @@ Base path: `/api`
 Includes threshold defaults:
 - `temp_lower_threshold DEFAULT 15.0`
 - `temp_upper_threshold DEFAULT 35.0`
+- `humidity_lower_threshold DEFAULT 30.0`
+- `humidity_upper_threshold DEFAULT 70.0`
 - `gas_upper_threshold DEFAULT 800.0`
+- `light_lower_threshold DEFAULT 20.0`
 
 ### `alerts`
 Columns:

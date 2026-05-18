@@ -27,6 +27,9 @@ def _generate_alerts_from_feeds(feeds: list[dict[str, Any]]) -> None:
     gas_threshold = thresholds["gas_upper_threshold"]
     temp_upper_threshold = thresholds["temp_upper_threshold"]
     temp_lower_threshold = thresholds["temp_lower_threshold"]
+    humidity_upper_threshold = thresholds["humidity_upper_threshold"]
+    humidity_lower_threshold = thresholds["humidity_lower_threshold"]
+    light_lower_threshold = thresholds["light_lower_threshold"]
 
     gas_value = _to_float((feed_map.get("gas") or {}).get("last_value"))
     if gas_value is not None and gas_value >= gas_threshold:
@@ -49,6 +52,29 @@ def _generate_alerts_from_feeds(feeds: list[dict[str, Any]]) -> None:
             alert_type="LOW_TEMPERATURE",
             message=f"Temperature is too low ({temp_value}C compared to {temp_lower_threshold}).",
             feed_key="temperature",
+        )
+
+    humidity_value = _to_float((feed_map.get("humidity") or {}).get("last_value"))
+    if humidity_value is not None and humidity_value >= humidity_upper_threshold:
+        database.create_alert(
+            alert_type="WARNING",
+            message=f"Humidity is too high ({humidity_value}% compared to {humidity_upper_threshold}%).",
+            feed_key="humidity",
+        )
+
+    if humidity_value is not None and humidity_value <= humidity_lower_threshold:
+        database.create_alert(
+            alert_type="WARNING",
+            message=f"Humidity is too low ({humidity_value}% compared to {humidity_lower_threshold}%).",
+            feed_key="humidity",
+        )
+
+    light_value = _to_float((feed_map.get("themis") or {}).get("last_value"))
+    if light_value is not None and light_value <= light_lower_threshold:
+        database.create_alert(
+            alert_type="LOW_LIGHT",
+            message=f"Light intensity is too low ({light_value} compared to {light_lower_threshold}).",
+            feed_key="themis",
         )
 
     pir_value = (feed_map.get("pir") or {}).get("last_value")
