@@ -1,10 +1,9 @@
 DROP TABLE IF EXISTS sensor_data, alerts, schedules, sensors, devices, setting_profiles, users CASCADE;
-DROP TYPE IF EXISTS user_role, sensor_type, device_type, device_status, action_type, alert_type;
+DROP TYPE IF EXISTS user_role, sensor_type, device_type, device_status, alert_type;
 
 CREATE TYPE device_type AS ENUM ('DOOR', 'LIGHT', 'MOTION', 'RGB', 'DIMMER', 'GENERIC');
 CREATE TYPE sensor_type AS ENUM ('TEMPERATURE', 'HUMIDITY', 'RAIN', 'GAS', 'LIGHT_INTENSITY', 'GENERIC');
 CREATE TYPE device_status AS ENUM ('ONLINE', 'OFFLINE', 'ERROR');
-CREATE TYPE action_type AS ENUM ('TURN_ON', 'TURN_OFF', 'SET_VALUE');
 CREATE TYPE alert_type AS ENUM (
     'WARNING',
     'INTRUSION',
@@ -60,8 +59,7 @@ CREATE TABLE schedules (
     id SERIAL PRIMARY KEY,
     setting_profile_id INTEGER NOT NULL REFERENCES setting_profiles(id) ON DELETE CASCADE,
     device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    action action_type NOT NULL,
-    payload JSONB,
+    value TEXT NOT NULL,
     trigger_time TIMESTAMPTZ NOT NULL
 );
 
@@ -89,6 +87,7 @@ CREATE INDEX ON users (current_setting_profile_id);
 CREATE UNIQUE INDEX users_single_house_owner_idx ON users ((is_house_owner)) WHERE is_house_owner = TRUE;
 CREATE INDEX ON schedules (setting_profile_id);
 CREATE INDEX ON schedules (device_id);
+CREATE UNIQUE INDEX schedules_unique_profile_device_idx ON schedules (setting_profile_id, device_id);
 CREATE INDEX ON alerts (feed_key);
 CREATE INDEX ON sensor_data (feed_key, timestamp DESC);
 

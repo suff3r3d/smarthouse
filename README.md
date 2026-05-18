@@ -88,17 +88,68 @@ Base path: `/api`
 - `GET /api/sensors/export` (stub)
 
 ### Schedules
-- `GET /api/schedules`
-- `POST /api/schedules`
-- `GET /api/schedules/{schedule_id}`
-- `PUT /api/schedules/{schedule_id}`
 
-Current schedule payload shape:
-- `setting_profile_id`
-- `device_id`
-- `action` (`TURN_ON` | `TURN_OFF` | `SET_VALUE`)
-- `payload` (optional JSON)
-- `trigger_time`
+- `GET /api/schedules`
+  - Auth: Required
+  - Query (optional): `device_id` (integer)
+  - Returns schedules that belong to authenticated user’s setting profiles.
+  - Response `data` shape: array of schedule objects
+    - `id`
+    - `setting_profile_id`
+    - `device_id`
+    - `value` (string)
+    - `trigger_time` (ISO datetime)
+
+- `POST /api/schedules`
+  - Auth: `auth_token` in request body (house-owner only)
+  - Body:
+    ```json
+    {
+      "auth_token": "<jwt>",
+      "device_id": 2,
+      "value": "OPEN",
+      "trigger_time": "2026-05-13T10:30:00Z"
+    }
+    ```
+  - Behavior:
+    - creates a new schedule row
+    - backend decodes token, finds user, then uses that user’s `current_setting_profile_id`
+  - Response `data`: created schedule object
+  - Errors:
+    - `400` invalid schedule payload
+    - `400` current setting profile not found for user
+    - `401` invalid auth token
+    - `403` only house owner can edit
+
+- `GET /api/schedules/{schedule_id}`
+  - Auth: Required
+  - Returns one schedule by id if it belongs to authenticated user’s setting profiles.
+  - Response `data`: schedule object
+  - Errors:
+    - `404` schedule not found
+    - `403` schedule does not belong to authenticated user
+
+- `PUT /api/schedules/{schedule_id}`
+  - Auth: `auth_token` in request body (house-owner only)
+  - Body (all fields optional):
+    ```json
+    {
+      "auth_token": "<jwt>",
+      "device_id": 2,
+      "value": "75",
+      "trigger_time": "2026-05-13T11:00:00Z"
+    }
+    ```
+  - Behavior:
+    - updates provided fields of the existing schedule
+    - keeps existing `setting_profile_id` unchanged
+    - enforces profile ownership checks
+  - Response `data`: updated schedule object
+  - Errors:
+    - `401` invalid auth token
+    - `403` only house owner can edit
+    - `403` schedule/profile does not belong to authenticated user
+    - `404` schedule not found
 
 ### System & Alerts
 - `GET /api/system/mode` (stub)
@@ -143,4 +194,3 @@ Columns:
 - `422` validation error
 - `500` server error
 - `502` upstream Adafruit error
-

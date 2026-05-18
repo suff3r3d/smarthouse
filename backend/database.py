@@ -52,8 +52,7 @@ def schedule_to_dict(schedule: Schedule) -> dict[str, Any]:
         "id": schedule.id,
         "setting_profile_id": schedule.setting_profile_id,
         "device_id": schedule.device_id,
-        "action": schedule.action,
-        "payload": schedule.payload,
+        "value": schedule.value,
         "trigger_time": schedule.trigger_time,
     }
 
@@ -88,16 +87,28 @@ def get_schedule_by_id(schedule_id: int):
 def create_schedule(
     setting_profile_id: int,
     device_id: int,
-    action: str,
+    value: str,
     trigger_time: datetime,
-    payload: Optional[dict[str, Any]] = None,
 ):
     with Session(_require_engine()) as session:
+        existing = session.execute(
+            select(Schedule).where(
+                Schedule.setting_profile_id == setting_profile_id,
+                Schedule.device_id == device_id,
+            )
+        ).scalars().first()
+
+        if existing:
+            existing.value = value
+            existing.trigger_time = trigger_time
+            session.commit()
+            session.refresh(existing)
+            return existing
+
         schedule = Schedule(
             setting_profile_id=setting_profile_id,
             device_id=device_id,
-            action=action,
-            payload=payload,
+            value=value,
             trigger_time=trigger_time,
         )
         session.add(schedule)
@@ -111,8 +122,7 @@ def update_schedule(
     *,
     setting_profile_id: Optional[int] = None,
     device_id: Optional[int] = None,
-    action: Optional[str] = None,
-    payload: Optional[dict[str, Any]] = None,
+    value: Optional[str] = None,
     trigger_time: Optional[datetime] = None,
 ):
     with Session(_require_engine()) as session:
@@ -124,10 +134,8 @@ def update_schedule(
             schedule.setting_profile_id = setting_profile_id
         if device_id is not None:
             schedule.device_id = device_id
-        if action is not None:
-            schedule.action = action
-        if payload is not None:
-            schedule.payload = payload
+        if value is not None:
+            schedule.value = value
         if trigger_time is not None:
             schedule.trigger_time = trigger_time
 
@@ -153,6 +161,24 @@ def get_setting_profile_ids_by_user_id(user_id: int) -> list[int]:
             {"user_id": user_id},
         ).all()
         return [row[0] for row in rows]
+
+
+def get_current_setting_profile_id_by_user_id(user_id: int) -> Optional[int]:
+    with Session(_require_engine()) as session:
+        row = session.execute(
+            text(
+                """
+                SELECT current_setting_profile_id
+                FROM users
+                WHERE id = :user_id
+                LIMIT 1
+                """
+            ),
+            {"user_id": user_id},
+        ).first()
+        if not row:
+            return None
+        return row[0]
 
 
 def get_admin_alert_thresholds() -> dict[str, float | None]:

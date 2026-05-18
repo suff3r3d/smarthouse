@@ -1,36 +1,35 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import database
 from routes.deps import require_auth
+from utils.jwt import JWTHandler
 
 router = APIRouter()
 
 
 class SchedulePayloadBase(BaseModel):
-    setting_profile_id: int
     device_id: int
-    action: Literal["TURN_ON", "TURN_OFF", "SET_VALUE"]
-    payload: Optional[Dict[str, Any]] = None
+    value: str
     trigger_time: datetime
 
 
 class ScheduleCreate(SchedulePayloadBase):
-    pass
+    auth_token: str
 
 
 class ScheduleUpdate(BaseModel):
-    setting_profile_id: Optional[int] = None
+    auth_token: str
     device_id: Optional[int] = None
-    action: Optional[Literal["TURN_ON", "TURN_OFF", "SET_VALUE"]] = None
-    payload: Optional[Dict[str, Any]] = None
+    value: Optional[str] = None
     trigger_time: Optional[datetime] = None
 
 
 class ScheduleOut(SchedulePayloadBase):
+    setting_profile_id: int
     id: int
 
     class Config:
@@ -50,23 +49,28 @@ async def list_schedules(
 
 
 @router.post("/schedules", summary="Create a New Schedule", response_model=ScheduleOut)
-async def create_schedule(payload: ScheduleCreate, auth: dict = Depends(require_auth)):
+async def create_schedule(payload: ScheduleCreate):
     """
     Create a new schedule for a device.
     """
-    if not auth["user"].is_house_owner:
+    decoded = JWTHandler.decode(payload.auth_token)
+    user_id = int(decoded.get("id", 0))
+    user = database.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    if not user.is_house_owner:
         raise HTTPException(status_code=403, detail="Only house owner can edit")
 
-    profile_ids = auth["setting_profile_ids"]
-    if payload.setting_profile_id not in profile_ids:
-        raise HTTPException(status_code=403, detail="setting_profile_id does not belong to authenticated user")
+    current_profile_id = database.get_current_setting_profile_id_by_user_id(user.id)
+    if current_profile_id is None:
+        raise HTTPException(status_code=400, detail="Current setting profile not found for user")
 
     try:
         return database.create_schedule(
-            setting_profile_id=payload.setting_profile_id,
+            setting_profile_id=current_profile_id,
             device_id=payload.device_id,
-            action=payload.action,
-            payload=payload.payload,
+            value=payload.value,
             trigger_time=payload.trigger_time,
         )
     except Exception as exc:
@@ -91,29 +95,30 @@ async def get_schedule(schedule_id: int, auth: dict = Depends(require_auth)):
 async def update_schedule(
     schedule_id: int,
     payload: ScheduleUpdate,
-    auth: dict = Depends(require_auth),
 ):
     """
     Update a schedule.
     """
-    if not auth["user"].is_house_owner:
+    decoded = JWTHandler.decode(payload.auth_token)
+    user_id = int(decoded.get("id", 0))
+    user = database.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    if not user.is_house_owner:
         raise HTTPException(status_code=403, detail="Only house owner can edit")
 
-    profile_ids = auth["setting_profile_ids"]
+    profile_ids = database.get_setting_profile_ids_by_user_id(user.id)
     existing_schedule = database.get_schedule_by_id(schedule_id)
     if not existing_schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     if existing_schedule.setting_profile_id not in profile_ids:
         raise HTTPException(status_code=403, detail="Schedule does not belong to authenticated user")
-    if payload.setting_profile_id is not None and payload.setting_profile_id not in profile_ids:
-        raise HTTPException(status_code=403, detail="setting_profile_id does not belong to authenticated user")
 
     schedule = database.update_schedule(
         schedule_id,
-        setting_profile_id=payload.setting_profile_id,
         device_id=payload.device_id,
-        action=payload.action,
-        payload=payload.payload,
+        value=payload.value,
         trigger_time=payload.trigger_time,
     )
     return schedule
