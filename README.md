@@ -196,9 +196,11 @@ Base path: `/api`
 
 ### System & Alerts
 - `GET /api/system/mode` (stub)
-- `GET /api/alerts/list?since=<ISO_DATETIME>`
+- `GET /api/alerts/list?since=<ISO_DATETIME>&feed_key=<FEED_KEY>`
   - `since` is optional
-  - Returns recent alerts from DB
+  - `feed_key` is optional (`temperature`, `gas`, `pir`, ...)
+  - if `feed_key` is set: return only alerts of that feed
+  - if `feed_key` is not set: return alerts of all feeds
 
 ---
 

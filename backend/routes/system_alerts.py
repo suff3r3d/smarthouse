@@ -17,12 +17,15 @@ async def get_system_mode():
 
 
 @router.get("/alerts/list", summary="List Alerts")
-async def list_alerts(since: Optional[datetime] = None):
+async def list_alerts(
+    since: Optional[datetime] = None,
+    feed_key: Optional[str] = None,
+):
     """
     Get a list of alerts.
     """
     try:
-        alerts = database.list_alerts(limit=100, since=since)
+        alerts = database.list_alerts(limit=100, since=since, feed_key=feed_key)
         return {"alerts": alerts, "count": len(alerts)}
     except Exception as exc:
         raise HTTPException(

@@ -20,7 +20,7 @@ async def connect():
   global engine
   engine = create_engine(
       DATABASE_URL, 
-      echo=True, 
+      echo=False, 
       connect_args={"options": "-c statement_timeout=5000"}
   )
 
@@ -500,7 +500,11 @@ def get_device_value_by_feed_key(device_feed_key: str) -> Optional[Any]:
         return row[0]
 
 
-def list_alerts(limit: int = 100, since: Optional[datetime] = None) -> list[dict[str, Any]]:
+def list_alerts(
+    limit: int = 100,
+    since: Optional[datetime] = None,
+    feed_key: Optional[str] = None,
+) -> list[dict[str, Any]]:
     with Session(_require_engine()) as session:
         alert_columns = _get_table_columns(session, "alerts")
         has_alert_type = "alert_type" in alert_columns
@@ -508,10 +512,18 @@ def list_alerts(limit: int = 100, since: Optional[datetime] = None) -> list[dict
 
         select_alert_type = "a.alert_type AS alert_type" if has_alert_type else "'WARNING' AS alert_type"
         select_feed_key = "a.feed_key AS feed_key" if has_feed_key else "NULL AS feed_key"
-        where_clause = "WHERE a.created_at > :since" if since is not None else ""
         params = {"limit": limit}
+        conditions: list[str] = []
         if since is not None:
+            conditions.append("a.created_at > :since")
             params["since"] = since
+        if feed_key is not None:
+            if not has_feed_key:
+                return []
+            conditions.append("a.feed_key = :feed_key")
+            params["feed_key"] = feed_key
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         rows = session.execute(
             text(
                 f"""
