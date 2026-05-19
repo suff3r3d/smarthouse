@@ -1,10 +1,12 @@
+from datetime import datetime
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 import database
+from routes.deps import require_auth
 from routes.feed_types import DEVICE_FEEDS, is_device_feed
 from utils import AdafruitIO, JWTHandler
 
@@ -105,3 +107,38 @@ async def get_device_state(device_id: str, payload: DeviceAuthPayload):
             detail=f"No stored value found for device '{device_id}'",
         )
     return value
+
+
+@router.get("/device-data", summary="Get Device Activity for Chart")
+async def get_device_chart_data(
+    feed_key: str,
+    start_time: datetime,
+    end_time: datetime,
+    auth: dict = Depends(require_auth),
+):
+    """
+    Get time-series activity data for a device feed within a period.
+    Returns {feed_key, data: [{timestamp, value}], count} ordered by timestamp ascending.
+    """
+    if not is_device_feed(feed_key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{feed_key}' is not a known device feed",
+        )
+    if start_time > end_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_time must be less than or equal to end_time",
+        )
+    try:
+        data = database.get_sensor_timeseries(
+            feed_key=feed_key,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        return {"feed_key": feed_key, "data": data, "count": len(data)}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch device activity: {exc}",
+        )

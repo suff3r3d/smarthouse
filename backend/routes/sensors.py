@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 import database
 from routes.deps import require_auth
-from routes.feed_types import SENSOR_FEEDS, is_sensor_feed
+from routes.feed_types import DEVICE_FEEDS, SENSOR_FEEDS, is_sensor_feed
 from utils import JWTHandler
 
 router = APIRouter()
@@ -101,6 +101,41 @@ async def get_sensor_history(payload: SensorHistoryPayload):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch sensor history: {exc}",
+        )
+
+
+@router.get("/sensor-data", summary="Get Feed Data for Chart")
+async def get_feed_chart_data(
+    feed_key: str,
+    start_time: datetime,
+    end_time: datetime,
+    auth: dict = Depends(require_auth),
+):
+    """
+    Get time-series data for any feed (sensor or device) within a period.
+    Returns [{timestamp, value}] ordered by timestamp ascending.
+    """
+    if feed_key not in (SENSOR_FEEDS | DEVICE_FEEDS):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{feed_key}' is not a known feed key",
+        )
+    if start_time > end_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_time must be less than or equal to end_time",
+        )
+    try:
+        data = database.get_sensor_timeseries(
+            feed_key=feed_key,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        return {"feed_key": feed_key, "data": data, "count": len(data)}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch feed data: {exc}",
         )
 
 

@@ -61,6 +61,16 @@ Base path: `/api`
   - Body model still expects `auth_token` in current code
   - Returns cached device state from database
 
+- `GET /api/device-data`
+  - Auth: Required
+  - Query: `feed_key`, `start_time` (ISO datetime), `end_time` (ISO datetime)
+  - Accepts only device feed keys (`lb1`, `door`, `pir`, `rgb`, `light-pwm`)
+  - Returns time-series activity rows from `sensor_data` ordered by timestamp ascending
+  - Response `data`:
+    - `feed_key`
+    - `data`: array of `{ timestamp, value }`
+    - `count`
+
 ### Sensors
 - `GET /api/sensors`
   - Reads current sensor states from database cache
@@ -83,6 +93,16 @@ Base path: `/api`
   - Each row:
     - `timestamp`
     - `value`
+
+- `GET /api/sensor-data`
+  - Auth: Required
+  - Query: `feed_key`, `start_time` (ISO datetime), `end_time` (ISO datetime)
+  - Accepts any known feed key (`temperature`, `humidity`, `rain`, `gas`, `themis`, `lb1`, `door`, `pir`, `rgb`, `light-pwm`)
+  - Returns time-series rows from `sensor_data` ordered by timestamp ascending
+  - Response `data`:
+    - `feed_key`
+    - `data`: array of `{ timestamp, value }`
+    - `count`
 
 - `GET /api/sensors/latest` (stub)
 - `GET /api/sensors/export` (stub)

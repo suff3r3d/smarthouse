@@ -11,3 +11,8 @@ __pycache__/
 # SSL certs
 *.crt
 *.key
+
+# Others
+*postman
+*DS_Store
+smarthouse.postman_collection.json
