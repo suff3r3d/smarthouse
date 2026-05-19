@@ -265,6 +265,61 @@ def update_setting_profile_thresholds(
         return dict(row) if row else None
 
 
+def get_setting_profile_away_mode(setting_profile_id: int) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        row = session.execute(
+            text(
+                """
+                SELECT
+                    id AS setting_profile_id,
+                    away_mode
+                FROM setting_profiles
+                WHERE id = :setting_profile_id
+                LIMIT 1
+                """
+            ),
+            {"setting_profile_id": setting_profile_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def update_setting_profile_away_mode(
+    *,
+    setting_profile_id: int,
+    away_mode: bool,
+) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        session.execute(
+            text(
+                """
+                UPDATE setting_profiles
+                SET away_mode = :away_mode
+                WHERE id = :setting_profile_id
+                """
+            ),
+            {
+                "setting_profile_id": setting_profile_id,
+                "away_mode": away_mode,
+            },
+        )
+        session.commit()
+
+        row = session.execute(
+            text(
+                """
+                SELECT
+                    id AS setting_profile_id,
+                    away_mode
+                FROM setting_profiles
+                WHERE id = :setting_profile_id
+                LIMIT 1
+                """
+            ),
+            {"setting_profile_id": setting_profile_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
 def get_admin_alert_thresholds() -> dict[str, float | None]:
     """
     Return alert thresholds from the house owner's setting profile.

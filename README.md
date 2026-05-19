@@ -214,6 +214,32 @@ Base path: `/api`
       - `light_lower_threshold >= 0`
   - Response `data`: full updated thresholds object
 
+- `POST /api/setting-profiles/current/away-mode`
+  - Auth: `auth_token` in request body
+  - Body:
+    ```json
+    {
+      "auth_token": "<jwt>"
+    }
+    ```
+  - Returns current profile away-mode status.
+  - Response `data`:
+    - `setting_profile_id`
+    - `away_mode`
+
+- `PUT /api/setting-profiles/current/away-mode`
+  - Auth: `auth_token` in request body
+  - Body:
+    ```json
+    {
+      "auth_token": "<jwt>",
+      "away_mode": true
+    }
+    ```
+  - Behavior:
+    - updates `away_mode` on current setting profile
+  - Response `data`: `true` when updated
+
 ### System & Alerts
 - `GET /api/system/mode` (stub)
 - `GET /api/alerts/list?since=<ISO_DATETIME>&feed_key=<FEED_KEY>`

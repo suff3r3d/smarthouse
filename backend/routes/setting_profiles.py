@@ -9,16 +9,19 @@ from utils import JWTHandler
 router = APIRouter()
 
 
+def _validate_allowed_fields(values: dict, allowed_fields: set[str]) -> dict:
+    for key in values.keys():
+        if key not in allowed_fields:
+            raise ValueError(f"{key} không tồn tại")
+    return values
+
+
 class ThresholdsGetPayload(BaseModel):
     auth_token: str
 
     @root_validator(pre=True)
     def validate_supported_fields(cls, values):
-        allowed_fields = {"auth_token"}
-        for key in values.keys():
-            if key not in allowed_fields:
-                raise ValueError(f"{key} không tồn tại")
-        return values
+        return _validate_allowed_fields(values, {"auth_token"})
 
 
 class ThresholdsUpdatePayload(BaseModel):
@@ -32,19 +35,35 @@ class ThresholdsUpdatePayload(BaseModel):
 
     @root_validator(pre=True)
     def validate_supported_fields(cls, values):
-        allowed_fields = {
-            "auth_token",
-            "temp_lower_threshold",
-            "temp_upper_threshold",
-            "humidity_lower_threshold",
-            "humidity_upper_threshold",
-            "gas_upper_threshold",
-            "light_lower_threshold",
-        }
-        for key in values.keys():
-            if key not in allowed_fields:
-                raise ValueError(f"{key} không tồn tại")
-        return values
+        return _validate_allowed_fields(
+            values,
+            {
+                "auth_token",
+                "temp_lower_threshold",
+                "temp_upper_threshold",
+                "humidity_lower_threshold",
+                "humidity_upper_threshold",
+                "gas_upper_threshold",
+                "light_lower_threshold",
+            },
+        )
+
+
+class AwayModeGetPayload(BaseModel):
+    auth_token: str
+
+    @root_validator(pre=True)
+    def validate_supported_fields(cls, values):
+        return _validate_allowed_fields(values, {"auth_token"})
+
+
+class AwayModeUpdatePayload(BaseModel):
+    auth_token: str
+    away_mode: bool
+
+    @root_validator(pre=True)
+    def validate_supported_fields(cls, values):
+        return _validate_allowed_fields(values, {"auth_token", "away_mode"})
 
 
 def _resolve_current_setting_profile_id(auth_token: str) -> int:
@@ -101,7 +120,6 @@ async def update_current_thresholds(payload: ThresholdsUpdatePayload):
     humidity_lower = payload.humidity_lower_threshold
     humidity_upper = payload.humidity_upper_threshold
 
-    # If one side is missing in the request, use current DB values for pair checks.
     current = database.get_setting_profile_thresholds(setting_profile_id)
     if not current:
         raise HTTPException(
@@ -146,6 +164,33 @@ async def update_current_thresholds(payload: ThresholdsUpdatePayload):
         humidity_upper_threshold=payload.humidity_upper_threshold,
         gas_upper_threshold=payload.gas_upper_threshold,
         light_lower_threshold=payload.light_lower_threshold,
+    )
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Setting profile not found",
+        )
+    return True
+
+
+@router.post("/setting-profiles/current/away-mode", summary="Get Current Setting Profile Away Mode")
+async def get_current_away_mode(payload: AwayModeGetPayload):
+    setting_profile_id = _resolve_current_setting_profile_id(payload.auth_token)
+    data = database.get_setting_profile_away_mode(setting_profile_id)
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Setting profile not found",
+        )
+    return data
+
+
+@router.put("/setting-profiles/current/away-mode", summary="Update Current Setting Profile Away Mode")
+async def update_current_away_mode(payload: AwayModeUpdatePayload):
+    setting_profile_id = _resolve_current_setting_profile_id(payload.auth_token)
+    data = database.update_setting_profile_away_mode(
+        setting_profile_id=setting_profile_id,
+        away_mode=payload.away_mode,
     )
     if not data:
         raise HTTPException(
