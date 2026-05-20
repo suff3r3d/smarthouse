@@ -18,6 +18,18 @@ class User(Base):
         return f"User({self.username})"
 
 
+class SettingProfile(Base):
+    __tablename__ = "setting_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+
+class Device(Base):
+    __tablename__ = "devices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+
 class Schedule(Base):
     __tablename__ = "schedules"
 

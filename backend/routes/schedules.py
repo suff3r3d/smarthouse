@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 class SchedulePayloadBase(BaseModel):
-    device_id: int
+    feed_key: str
     value: str
     trigger_time: datetime
 
@@ -23,7 +23,7 @@ class ScheduleCreate(SchedulePayloadBase):
 
 class ScheduleUpdate(BaseModel):
     auth_token: str
-    device_id: Optional[int] = None
+    feed_key: Optional[str] = None
     value: Optional[str] = None
     trigger_time: Optional[datetime] = None
 
@@ -39,13 +39,32 @@ class ScheduleOut(SchedulePayloadBase):
 @router.get("/schedules", summary="List All Schedules", response_model=List[ScheduleOut])
 async def list_schedules(
     auth: dict = Depends(require_auth),
-    device_id: Optional[int] = None,
+    feed_key: Optional[str] = None,
 ):
     """
     Get a list of all schedules.
     """
     profile_ids = auth["setting_profile_ids"]
-    return database.list_schedules_by_profile_ids(profile_ids=profile_ids, device_id=device_id)
+    device_id: Optional[int] = None
+    if feed_key is not None:
+        device_id = database.get_device_id_by_feed_key(feed_key)
+        if device_id is None:
+            return []
+
+    schedules = database.list_schedules_by_profile_ids(profile_ids=profile_ids, device_id=device_id)
+    result = []
+    for schedule in schedules:
+        schedule_feed_key = database.get_device_feed_key_by_id(schedule.device_id)
+        result.append(
+            {
+                "id": schedule.id,
+                "setting_profile_id": schedule.setting_profile_id,
+                "feed_key": schedule_feed_key,
+                "value": schedule.value,
+                "trigger_time": schedule.trigger_time,
+            }
+        )
+    return result
 
 
 @router.post("/schedules", summary="Create a New Schedule", response_model=ScheduleOut)
@@ -54,7 +73,9 @@ async def create_schedule(payload: ScheduleCreate):
     Create a new schedule for a device.
     """
     decoded = JWTHandler.decode(payload.auth_token)
-    user_id = int(decoded.get("id", 0))
+    if not decoded:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    user_id = int(decoded.get("sub", 0))
     user = database.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid auth token")
@@ -67,12 +88,23 @@ async def create_schedule(payload: ScheduleCreate):
         raise HTTPException(status_code=400, detail="Current setting profile not found for user")
 
     try:
-        return database.create_schedule(
+        device_id = database.get_device_id_by_feed_key(payload.feed_key)
+        if device_id is None:
+            raise HTTPException(status_code=400, detail=f"Invalid feed_key: {payload.feed_key}")
+
+        schedule = database.create_schedule(
             setting_profile_id=current_profile_id,
-            device_id=payload.device_id,
+            device_id=device_id,
             value=payload.value,
             trigger_time=payload.trigger_time,
         )
+        return {
+            "id": schedule.id,
+            "setting_profile_id": schedule.setting_profile_id,
+            "feed_key": database.get_device_feed_key_by_id(schedule.device_id),
+            "value": schedule.value,
+            "trigger_time": schedule.trigger_time,
+        }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid schedule payload: {exc}")
 
@@ -88,7 +120,13 @@ async def get_schedule(schedule_id: int, auth: dict = Depends(require_auth)):
         raise HTTPException(status_code=404, detail="Schedule not found")
     if schedule.setting_profile_id not in profile_ids:
         raise HTTPException(status_code=403, detail="Schedule does not belong to authenticated user")
-    return schedule
+    return {
+        "id": schedule.id,
+        "setting_profile_id": schedule.setting_profile_id,
+        "feed_key": database.get_device_feed_key_by_id(schedule.device_id),
+        "value": schedule.value,
+        "trigger_time": schedule.trigger_time,
+    }
 
 
 @router.put("/schedules/{schedule_id}", summary="Update a Schedule", response_model=ScheduleOut)
@@ -100,7 +138,9 @@ async def update_schedule(
     Update a schedule.
     """
     decoded = JWTHandler.decode(payload.auth_token)
-    user_id = int(decoded.get("id", 0))
+    if not decoded:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    user_id = int(decoded.get("sub", 0))
     user = database.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid auth token")
@@ -115,10 +155,22 @@ async def update_schedule(
     if existing_schedule.setting_profile_id not in profile_ids:
         raise HTTPException(status_code=403, detail="Schedule does not belong to authenticated user")
 
+    device_id: Optional[int] = None
+    if payload.feed_key is not None:
+        device_id = database.get_device_id_by_feed_key(payload.feed_key)
+        if device_id is None:
+            raise HTTPException(status_code=400, detail=f"Invalid feed_key: {payload.feed_key}")
+
     schedule = database.update_schedule(
         schedule_id,
-        device_id=payload.device_id,
+        device_id=device_id,
         value=payload.value,
         trigger_time=payload.trigger_time,
     )
-    return schedule
+    return {
+        "id": schedule.id,
+        "setting_profile_id": schedule.setting_profile_id,
+        "feed_key": database.get_device_feed_key_by_id(schedule.device_id),
+        "value": schedule.value,
+        "trigger_time": schedule.trigger_time,
+    }

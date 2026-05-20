@@ -111,12 +111,12 @@ Base path: `/api`
 
 - `GET /api/schedules`
   - Auth: Required
-  - Query (optional): `device_id` (integer)
+  - Query (optional): `feed_key` (string)
   - Returns schedules that belong to authenticated user’s setting profiles.
   - Response `data` shape: array of schedule objects
     - `id`
     - `setting_profile_id`
-    - `device_id`
+    - `feed_key`
     - `value` (string)
     - `trigger_time` (ISO datetime)
 
@@ -126,7 +126,7 @@ Base path: `/api`
     ```json
     {
       "auth_token": "<jwt>",
-      "device_id": 2,
+      "feed_key": "door",
       "value": "OPEN",
       "trigger_time": "2026-05-13T10:30:00Z"
     }
@@ -155,7 +155,7 @@ Base path: `/api`
     ```json
     {
       "auth_token": "<jwt>",
-      "device_id": 2,
+      "feed_key": "lb1",
       "value": "75",
       "trigger_time": "2026-05-13T11:00:00Z"
     }

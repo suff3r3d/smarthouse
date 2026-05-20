@@ -57,6 +57,28 @@ def schedule_to_dict(schedule: Schedule) -> dict[str, Any]:
     }
 
 
+def get_device_id_by_feed_key(feed_key: str) -> Optional[int]:
+    with Session(_require_engine()) as session:
+        row = session.execute(
+            text("SELECT id FROM devices WHERE feed_key = :feed_key LIMIT 1"),
+            {"feed_key": feed_key},
+        ).first()
+        if not row:
+            return None
+        return row[0]
+
+
+def get_device_feed_key_by_id(device_id: int) -> Optional[str]:
+    with Session(_require_engine()) as session:
+        row = session.execute(
+            text("SELECT feed_key FROM devices WHERE id = :device_id LIMIT 1"),
+            {"device_id": device_id},
+        ).first()
+        if not row:
+            return None
+        return row[0]
+
+
 def list_schedules(setting_profile_id: Optional[int] = None, device_id: Optional[int] = None):
     with Session(_require_engine()) as session:
         stmt = select(Schedule).order_by(Schedule.trigger_time.asc())
@@ -152,6 +174,33 @@ def delete_schedule(schedule_id: int) -> bool:
         session.delete(schedule)
         session.commit()
         return True
+
+
+def list_due_schedules(now: datetime) -> list[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        rows = session.execute(
+            text(
+                """
+                SELECT
+                    s.id,
+                    s.setting_profile_id,
+                    s.device_id,
+                    s.value,
+                    s.trigger_time,
+                    d.feed_key,
+                    sp.away_mode
+                FROM schedules s
+                JOIN devices d
+                  ON d.id = s.device_id
+                JOIN setting_profiles sp
+                  ON sp.id = s.setting_profile_id
+                WHERE s.trigger_time <= :now
+                ORDER BY s.trigger_time ASC, s.id ASC
+                """
+            ),
+            {"now": now},
+        ).mappings().all()
+        return [dict(row) for row in rows]
 
 
 def get_setting_profile_ids_by_user_id(user_id: int) -> list[int]:

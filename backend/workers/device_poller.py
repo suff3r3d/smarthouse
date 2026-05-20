@@ -93,7 +93,6 @@ def _generate_alerts_from_feeds(feeds: list[dict[str, Any]]) -> None:
             feed_key="door",
         )
 
-
 def device_polling_worker(stop_event: threading.Event) -> None:
     print("[device-poller] started", flush=True)
     while not stop_event.is_set():
@@ -103,7 +102,7 @@ def device_polling_worker(stop_event: threading.Event) -> None:
             _generate_alerts_from_feeds(devices)
             for device in devices:
                 device_name = device.get("name") or device.get("key") or "unknown"
-                print(f"{device_name}: {device.get('last_data')}", flush=True)
+                # print(f"{device_name}: {device.get('last_data')}", flush=True)
         except Exception as exc:
             logger.exception("Device polling error: %s", exc)
         stop_event.wait(5)

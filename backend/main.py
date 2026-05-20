@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from routes.api import router as api_router
 from utils import JWTHandler
-from workers import device_polling_worker
+from workers import device_polling_worker, scheduler_worker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,7 +21,20 @@ async def lifespan(app: FastAPI):
         name="device-polling-thread",
     )
     app.state.device_poll_thread.start()
+
+    app.state.scheduler_stop_event = threading.Event()
+    app.state.scheduler_thread = threading.Thread(
+        target=scheduler_worker,
+        args=(app.state.scheduler_stop_event,),
+        daemon=True,
+        name="scheduler-thread",
+    )
+    app.state.scheduler_thread.start()
     yield
+
+    app.state.scheduler_stop_event.set()
+    app.state.scheduler_thread.join(timeout=5)
+
     app.state.device_poll_stop_event.set()
     app.state.device_poll_thread.join(timeout=5)
     await database.disconnect()
