@@ -536,7 +536,7 @@ def list_sensors_from_db() -> list[dict[str, Any]]:
 
         unit_col = "unit" if "unit" in sensor_columns else None
 
-        select_cols = ["feed_key", "name", "type"]
+        select_cols = ["feed_key", "name", "type", "location"]
         if unit_col:
             select_cols.append(f"{unit_col} AS unit")
         else:
@@ -568,7 +568,7 @@ def list_devices_from_db() -> list[dict[str, Any]]:
             "last_recorded_at" if "last_recorded_at" in device_columns else None
         )
 
-        select_cols = ["feed_key", "name", "type", "status"]
+        select_cols = ["feed_key", "name", "type", "status", "location"]
         if value_col:
             select_cols.append(f"{value_col} AS value")
         else:
