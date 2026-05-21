@@ -52,6 +52,7 @@ Base path: `/api`
 ### Devices
 - `GET /api/devices`
   - Reads current device states from database cache
+  - Response object per device includes `location` (nullable)
 
 - `POST /api/devices/{device_id}/set_state`
   - Body: `{ "auth_token": "...", "state": <any> }`
@@ -74,6 +75,7 @@ Base path: `/api`
 ### Sensors
 - `GET /api/sensors`
   - Reads current sensor states from database cache
+  - Response object per sensor includes `location` (nullable)
 
 - `GET /api/sensors/{sensor_id}/get_value`
   - Auth required
@@ -243,6 +245,28 @@ Columns:
 - `message`
 - `created_at`
 
+### `devices`
+Columns:
+- `id`
+- `feed_key`
+- `name`
+- `type`
+- `status`
+- `value`
+- `last_record_time`
+- `location` *(nullable)*
+
+### `sensors`
+Columns:
+- `id`
+- `feed_key`
+- `name`
+- `type`
+- `unit`
+- `current_value`
+- `last_recorded_at`
+- `location` *(nullable)*
+
 ### `sensor_data`
 Columns:
 - `id` (PK)
@@ -251,6 +275,16 @@ Columns:
 - `value`
 
 `sensor_data.timestamp` is poll-write time (`NOW()`), so each polling cycle appends a new row even if value is unchanged.
+
+---
+
+## Changelog
+
+### 2026-05-21
+- Added `location VARCHAR(100)` column to both `devices` and `sensors` tables in the DB schema (`db/init/init.sql`).
+- Updated `GET /api/devices` to return `location` per device.
+- Updated `GET /api/sensors` to return `location` per sensor.
+- Both use a dynamic column check (`_get_table_columns`) so existing databases without the column return `null` instead of erroring. Run `ALTER TABLE devices ADD COLUMN location VARCHAR(100)` and `ALTER TABLE sensors ADD COLUMN location VARCHAR(100)` on existing instances to apply the change without re-initialising the DB.
 
 ---
 

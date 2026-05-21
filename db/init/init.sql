@@ -46,7 +46,8 @@ CREATE TABLE devices (
     type device_type NOT NULL,
     status device_status NOT NULL DEFAULT 'OFFLINE',
     value TEXT,
-    last_record_time TIMESTAMPTZ
+    last_record_time TIMESTAMPTZ,
+    location VARCHAR(100)
 );
 
 CREATE TABLE sensors (
@@ -56,7 +57,8 @@ CREATE TABLE sensors (
     type sensor_type NOT NULL,
     unit VARCHAR(32),
     current_value TEXT,
-    last_recorded_at TIMESTAMPTZ
+    last_recorded_at TIMESTAMPTZ,
+    location VARCHAR(100)
 );
 
 CREATE TABLE schedules (

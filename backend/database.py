@@ -431,6 +431,7 @@ def list_sensors_from_db() -> list[dict[str, Any]]:
         )
 
         unit_col = "unit" if "unit" in sensor_columns else None
+        sensor_location_col = "location" if "location" in sensor_columns else None
 
         select_cols = ["feed_key", "name", "type"]
         if unit_col:
@@ -445,6 +446,10 @@ def list_sensors_from_db() -> list[dict[str, Any]]:
             select_cols.append(f"{time_col} AS last_recorded_at")
         else:
             select_cols.append("NULL AS last_recorded_at")
+        if sensor_location_col:
+            select_cols.append("location")
+        else:
+            select_cols.append("NULL AS location")
 
         query = f"SELECT {', '.join(select_cols)} FROM sensors ORDER BY id ASC"
         rows = session.execute(text(query)).mappings().all()
@@ -464,6 +469,8 @@ def list_devices_from_db() -> list[dict[str, Any]]:
             "last_recorded_at" if "last_recorded_at" in device_columns else None
         )
 
+        location_col = "location" if "location" in device_columns else None
+
         select_cols = ["feed_key", "name", "type", "status"]
         if value_col:
             select_cols.append(f"{value_col} AS value")
@@ -473,6 +480,10 @@ def list_devices_from_db() -> list[dict[str, Any]]:
             select_cols.append(f"{time_col} AS last_record_time")
         else:
             select_cols.append("NULL AS last_record_time")
+        if location_col:
+            select_cols.append("location")
+        else:
+            select_cols.append("NULL AS location")
 
         query = f"SELECT {', '.join(select_cols)} FROM devices ORDER BY id ASC"
         rows = session.execute(text(query)).mappings().all()
