@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -36,6 +37,45 @@ class SensorHistoryPayload(BaseModel):
     feed_key: str
     start_time: datetime
     end_time: datetime
+
+
+class SensorUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
+
+
+@router.patch("/sensors/{sensor_id}", summary="Update Sensor Name/Location")
+async def update_sensor(sensor_id: str, payload: SensorUpdatePayload, auth: dict = Depends(require_auth)):
+    """
+    Update a sensor's display name and/or room location. Homeowner only.
+    """
+    user = auth["user"]
+    if not user.is_house_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only house owner can edit sensors",
+        )
+
+    if payload.name is None and payload.location is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one field to update: name or location",
+        )
+
+    try:
+        updated = database.update_sensor_info(sensor_id, name=payload.name, location=payload.location)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update sensor: {exc}",
+        )
+
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sensor '{sensor_id}' not found",
+        )
+    return {"message": "Sensor updated successfully", "sensor": updated}
 
 
 @router.get("/sensors/{sensor_id}/get_value", summary="Get Sensor Value")

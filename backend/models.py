@@ -13,6 +13,7 @@ class User(Base):
     username: Mapped[str]
     password_hash: Mapped[str]
     is_house_owner: Mapped[bool]
+    house_owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     def __repr__(self):
         return f"User({self.username})"

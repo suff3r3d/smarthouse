@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +20,11 @@ class DeviceSetStatePayload(BaseModel):
 
 class DeviceAuthPayload(BaseModel):
     auth_token: str
+
+
+class DeviceUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
 
 
 @router.get("/devices", summary="List All Devices")
@@ -107,6 +112,40 @@ async def get_device_state(device_id: str, payload: DeviceAuthPayload):
             detail=f"No stored value found for device '{device_id}'",
         )
     return value
+
+
+@router.patch("/devices/{device_id}", summary="Update Device Name/Location")
+async def update_device(device_id: str, payload: DeviceUpdatePayload, auth: dict = Depends(require_auth)):
+    """
+    Update a device's display name and/or room location. Homeowner only.
+    """
+    user = auth["user"]
+    if not user.is_house_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only house owner can edit devices",
+        )
+
+    if payload.name is None and payload.location is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one field to update: name or location",
+        )
+
+    try:
+        updated = database.update_device_info(device_id, name=payload.name, location=payload.location)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update device: {exc}",
+        )
+
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device '{device_id}' not found",
+        )
+    return {"message": "Device updated successfully", "device": updated}
 
 
 @router.get("/device-data", summary="Get Device Activity for Chart")

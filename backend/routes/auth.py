@@ -1,11 +1,18 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+
 import database
 from models import User
 from routes.deps import require_auth
 from utils import JWTHandler, PasswordHandler
 
 router = APIRouter()
+
+_PASSWORD_RE = re.compile(
+    r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+\[\]{}|;:\'",.<>?/\\`~]).{8,}$'
+)
 
 
 class UserLogin(BaseModel):
@@ -15,6 +22,12 @@ class UserLogin(BaseModel):
 
 class UserCreate(UserLogin):
     pass
+
+
+class ChangePasswordPayload(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_new_password: str
 
 
 @router.post("/auth/register", summary="User Registration")
@@ -38,6 +51,7 @@ async def register_user(user_create: UserCreate, auth: dict = Depends(require_au
         username=user_create.username,
         password_hash=hashed_password,
         is_house_owner=False,
+        house_owner_id=request_user.id,
     )
     database.create_user(user)
     return {"message": "User registered successfully"}
@@ -57,3 +71,37 @@ async def login_for_access_token(user_login: UserLogin):
         )
     access_token = JWTHandler.sign(user_id=str(user.id))
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.put("/auth/change-password", summary="Change Password")
+async def change_password(payload: ChangePasswordPayload, auth: dict = Depends(require_auth)):
+    """
+    Change the authenticated user's password.
+    New password must be ≥8 chars and contain uppercase, lowercase, digit, and special character.
+    """
+    user = auth["user"]
+
+    if not PasswordHandler.verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    if payload.new_password != payload.confirm_new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and confirmation do not match",
+        )
+
+    if not _PASSWORD_RE.match(payload.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "New password must be at least 8 characters and contain "
+                "uppercase, lowercase, digit, and special character"
+            ),
+        )
+
+    new_hash = PasswordHandler.get_hashed_password(payload.new_password)
+    database.update_user_password(user.id, new_hash)
+    return {"message": "Password changed successfully"}

@@ -36,6 +36,9 @@ CREATE TABLE setting_profiles (
     gas_upper_threshold FLOAT DEFAULT 800.0,
     light_lower_threshold FLOAT DEFAULT 20.0,
     away_mode BOOLEAN NOT NULL DEFAULT FALSE,
+    automation_mode BOOLEAN NOT NULL DEFAULT FALSE,
+    door_auto_lock BOOLEAN NOT NULL DEFAULT FALSE,
+    door_auto_lock_delay_sec INTEGER NOT NULL DEFAULT 120,
     UNIQUE(user_id, name)
 );
 
@@ -69,6 +72,16 @@ CREATE TABLE schedules (
     trigger_time TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE automation_rules (
+    id SERIAL PRIMARY KEY,
+    setting_profile_id INTEGER NOT NULL REFERENCES setting_profiles(id) ON DELETE CASCADE,
+    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    value TEXT NOT NULL,
+    time_of_day TIME NOT NULL,
+    days_of_week TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 CREATE TABLE alerts (
     id SERIAL PRIMARY KEY,
     alert_type alert_type NOT NULL DEFAULT 'WARNING',
@@ -96,6 +109,8 @@ CREATE INDEX ON schedules (device_id);
 CREATE UNIQUE INDEX schedules_unique_profile_device_idx ON schedules (setting_profile_id, device_id);
 CREATE INDEX ON alerts (feed_key);
 CREATE INDEX ON sensor_data (feed_key, timestamp DESC);
+CREATE INDEX automation_rules_profile_idx ON automation_rules (setting_profile_id);
+CREATE INDEX automation_rules_device_idx ON automation_rules (device_id);
 
 -- Seed default admin account (admin:admin).
 INSERT INTO users (username, password_hash, is_house_owner) VALUES

@@ -1,19 +1,33 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 import database
+from routes.deps import require_auth
 
 router = APIRouter()
 
 
 @router.get("/system/mode", summary="Get System Mode")
-async def get_system_mode():
+async def get_system_mode(auth: dict = Depends(require_auth)):
     """
-    Get the current system mode (e.g., "Home" or "Away").
+    Return the current away mode and automation mode status for the authenticated user's profile.
     """
-    pass
+    user = auth["user"]
+    profile_id = database.get_current_setting_profile_id_by_user_id(user.id)
+    if profile_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current setting profile not found for user",
+        )
+    data = database.get_mode_settings(profile_id)
+    return {
+        "away_mode": data["away_mode"],
+        "automation_mode": data["automation_mode"],
+        "door_auto_lock": data["door_auto_lock"],
+        "door_auto_lock_delay_sec": data["door_auto_lock_delay_sec"],
+    }
 
 
 @router.get("/alerts/list", summary="List Alerts")
