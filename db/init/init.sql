@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS sensor_data, alerts, schedules, sensors, devices, setting_profiles, users CASCADE;
+DROP TABLE IF EXISTS sensor_data, alerts, schedules, sensors, devices, setting_profiles, users, automation_rules CASCADE;
 DROP TYPE IF EXISTS user_role, sensor_type, device_type, device_status, alert_type;
 
 CREATE TYPE device_type AS ENUM ('DOOR', 'LIGHT', 'MOTION', 'RGB', 'DIMMER', 'GENERIC');
@@ -50,8 +50,7 @@ CREATE TABLE devices (
     type device_type NOT NULL,
     status device_status NOT NULL DEFAULT 'OFFLINE',
     value TEXT,
-    last_record_time TIMESTAMPTZ,
-    location VARCHAR(100)
+    last_record_time TIMESTAMPTZ
 );
 
 CREATE TABLE sensors (
@@ -62,8 +61,7 @@ CREATE TABLE sensors (
     type sensor_type NOT NULL,
     unit VARCHAR(32),
     current_value TEXT,
-    last_recorded_at TIMESTAMPTZ,
-    location VARCHAR(100)
+    last_recorded_at TIMESTAMPTZ
 );
 
 CREATE TABLE schedules (
@@ -136,17 +134,17 @@ WHERE u.username = 'admin'
 
 -- Seed from current Adafruit feed list:
 -- Devices (controllable): door, lb1, light-pwm, pir, rgb
-INSERT INTO devices (feed_key, name, type, status, value, last_record_time) VALUES
-    ('door', 'DOOR', 'DOOR', 'ONLINE', 'OPEN', '2026-04-16T09:05:03Z'),
-    ('lb1', 'LB1', 'LIGHT', 'ONLINE', '41', '2026-04-16T09:05:07Z'),
-    ('light-pwm', 'light_pwm', 'DIMMER', 'ONLINE', NULL, NULL),
-    ('pir', 'PIR', 'MOTION', 'ONLINE', 'ON', '2026-04-16T09:05:03Z'),
-    ('rgb', 'RGB', 'RGB', 'ONLINE', '15', '2026-04-16T09:05:09Z');
+INSERT INTO devices (feed_key, name, type, status, value, last_record_time, location) VALUES
+    ('door', 'DOOR', 'DOOR', 'ONLINE', 'OPEN', '2026-04-16T09:05:03Z', 'Living room'),
+    ('lb1', 'LB1', 'LIGHT', 'ONLINE', '41', '2026-04-16T09:05:07Z', 'Living room'),
+    ('light-pwm', 'light_pwm', 'DIMMER', 'ONLINE', NULL, NULL, 'Living room'),
+    ('pir', 'PIR', 'MOTION', 'ONLINE', 'ON', '2026-04-16T09:05:03Z', 'Living room'),
+    ('rgb', 'RGB', 'RGB', 'ONLINE', '15', '2026-04-16T09:05:09Z', 'Living room');
 
 -- Sensors (read-only): temperature, humidity, rain, gas, themis
 INSERT INTO sensors (feed_key, name, type, unit, current_value, last_recorded_at) VALUES
-    ('temperature', 'temperature', 'TEMPERATURE', '°C', '28.00', '2026-04-13T06:14:57Z'),
-    ('humidity', 'humidity', 'HUMIDITY', '%', '45', '2026-04-13T06:14:58Z'),
-    ('rain', 'rain', 'RAIN', 'raw', '716', '2026-04-13T06:14:58Z'),
-    ('gas', 'gas', 'GAS', 'ppm', '820', '2026-04-13T06:14:58Z'),
-    ('themis', 'themis', 'LIGHT_INTENSITY', '%', '82', '2026-04-13T06:14:58Z');
+    ('temperature', 'temperature', 'TEMPERATURE', '°C', '28.00', '2026-04-13T06:14:57Z', 'Living room'),
+    ('humidity', 'humidity', 'HUMIDITY', '%', '45', '2026-04-13T06:14:58Z', 'Living room'),
+    ('rain', 'rain', 'RAIN', 'raw', '716', '2026-04-13T06:14:58Z', 'Living room'),
+    ('gas', 'gas', 'GAS', 'ppm', '820', '2026-04-13T06:14:58Z', 'Living room'),
+    ('themis', 'themis', 'LIGHT_INTENSITY', '%', '82', '2026-04-13T06:14:58Z', 'Living room');
