@@ -134,6 +134,8 @@ def _run_automation_rules(aio: AdafruitIO) -> None:
     current_day = _WEEKDAY_MAP[now.weekday()]   # "MON" … "SUN"
     current_time = now.strftime("%H:%M")         # "HH:MM"
 
+    print(current_time, flush=True)
+
     rules = database.list_all_active_automation_rules()
     for rule in rules:
         if current_day not in rule.get("days_of_week", []):
@@ -144,6 +146,7 @@ def _run_automation_rules(aio: AdafruitIO) -> None:
         if _rule_last_executed.get(rule_id) == current_minute:
             continue  # already fired this minute
         try:
+            print(f'{rule['feed_key']}, {rule['value']}', flush=True)
             asyncio.run(aio.publish_feed(rule["feed_key"], rule["value"]))
             _rule_last_executed[rule_id] = current_minute
             print(
@@ -164,14 +167,16 @@ def device_polling_worker(stop_event: threading.Event) -> None:
             _generate_alerts_from_feeds(devices)
             for device in devices:
                 device_name = device.get("name") or device.get("key") or "unknown"
-                print(f"{device_name}: {device.get('last_data')}", flush=True)
+                # print(f"{device_name}: {device.get('last_data')}", flush=True)
 
             # Automation: run only when automation_mode is on and away_mode is off.
             # (away_mode takes precedence — devices are already in locked/off state.)
             settings = database.get_active_automation_settings()
-            if settings and settings.get("automation_mode") and not settings.get("away_mode"):
+            print(settings, flush=True)
+            if settings and not settings.get("away_mode"):
                 if settings.get("door_auto_lock"):
                     _run_door_auto_lock(settings, aio)
+                print(f'[device_polling_worker] start handling schedules', flush=True)
                 _run_automation_rules(aio)
 
         except Exception as exc:

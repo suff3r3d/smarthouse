@@ -8,6 +8,7 @@ services:
       AIO_USERNAME: ${AIO_USERNAME}
       AIO_KEY: ${AIO_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      TZ: Asia/Bangkok
     ports:
       - "8001:8001"
     volumes:
