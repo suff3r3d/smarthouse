@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
 from routes.auth import router as auth_router
+from routes.automation_rules import router as automation_rules_router
 from routes.devices import router as devices_router
 from routes.misc import router as misc_router
+from routes.modes import router as modes_router
 from routes.schedules import router as schedules_router
 from routes.sensors import router as sensors_router
 from routes.setting_profiles import router as setting_profiles_router
@@ -19,3 +21,5 @@ router.include_router(devices_router)
 router.include_router(schedules_router)
 router.include_router(setting_profiles_router)
 router.include_router(system_alerts_router)
+router.include_router(modes_router)
+router.include_router(automation_rules_router)

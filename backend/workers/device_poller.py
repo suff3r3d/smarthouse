@@ -1,12 +1,20 @@
 import asyncio
 import logging
 import threading
+from datetime import datetime, timezone
 from typing import Any
 
 import database
 from utils import AdafruitIO
 
 logger = logging.getLogger("device_poller")
+
+# Maps Python weekday() (0=Monday) to the day abbreviation used in automation_rules.days_of_week
+_WEEKDAY_MAP = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+# Tracks the last minute string ("YYYY-MM-DD HH:MM") each rule was executed.
+# Persists in memory for the lifetime of the worker thread.
+_rule_last_executed: dict[int, str] = {}
 
 
 def _to_float(value: Any) -> float | None:
@@ -93,16 +101,79 @@ def _generate_alerts_from_feeds(feeds: list[dict[str, Any]]) -> None:
             feed_key="door",
         )
 
+
+def _run_door_auto_lock(settings: dict[str, Any], aio: AdafruitIO) -> None:
+    """Lock the door if it has been OPEN longer than the configured delay."""
+    delay_sec = settings.get("door_auto_lock_delay_sec") or 120
+    door = database.get_device_info_by_feed_key("door")
+    if not door:
+        return
+    if str(door.get("value") or "").upper() != "OPEN":
+        return
+    last_record_time = door.get("last_record_time")
+    if not last_record_time:
+        return
+
+    now_utc = datetime.now(timezone.utc)
+    if last_record_time.tzinfo is None:
+        last_record_time = last_record_time.replace(tzinfo=timezone.utc)
+    elapsed = (now_utc - last_record_time).total_seconds()
+
+    if elapsed >= delay_sec:
+        try:
+            asyncio.run(aio.publish_feed("door", "LOCKED"))
+            print(f"[automation] Door auto-locked after {elapsed:.0f}s", flush=True)
+        except Exception as exc:
+            logger.warning("Door auto-lock failed: %s", exc)
+
+
+def _run_automation_rules(aio: AdafruitIO) -> None:
+    """Execute any automation rules whose time+day match the current moment."""
+    now = datetime.now()
+    current_minute = now.strftime("%Y-%m-%d %H:%M")
+    current_day = _WEEKDAY_MAP[now.weekday()]   # "MON" … "SUN"
+    current_time = now.strftime("%H:%M")         # "HH:MM"
+
+    rules = database.list_all_active_automation_rules()
+    for rule in rules:
+        if current_day not in rule.get("days_of_week", []):
+            continue
+        if rule.get("time_of_day", "")[:5] != current_time:
+            continue
+        rule_id = rule["id"]
+        if _rule_last_executed.get(rule_id) == current_minute:
+            continue  # already fired this minute
+        try:
+            asyncio.run(aio.publish_feed(rule["feed_key"], rule["value"]))
+            _rule_last_executed[rule_id] = current_minute
+            print(
+                f"[automation] Rule {rule_id} fired: {rule['feed_key']} = {rule['value']}",
+                flush=True,
+            )
+        except Exception as exc:
+            logger.warning("Automation rule %s failed: %s", rule_id, exc)
+
+
 def device_polling_worker(stop_event: threading.Event) -> None:
     print("[device-poller] started", flush=True)
     while not stop_event.is_set():
         try:
-            devices = asyncio.run(AdafruitIO().get_all_devices())
+            aio = AdafruitIO()
+            devices = asyncio.run(aio.get_all_devices())
             database.sync_feed_latest_values(devices)
             _generate_alerts_from_feeds(devices)
             for device in devices:
                 device_name = device.get("name") or device.get("key") or "unknown"
-                # print(f"{device_name}: {device.get('last_data')}", flush=True)
+                print(f"{device_name}: {device.get('last_data')}", flush=True)
+
+            # Automation: run only when automation_mode is on and away_mode is off.
+            # (away_mode takes precedence — devices are already in locked/off state.)
+            settings = database.get_active_automation_settings()
+            if settings and settings.get("automation_mode") and not settings.get("away_mode"):
+                if settings.get("door_auto_lock"):
+                    _run_door_auto_lock(settings, aio)
+                _run_automation_rules(aio)
+
         except Exception as exc:
             logger.exception("Device polling error: %s", exc)
         stop_event.wait(5)

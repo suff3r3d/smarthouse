@@ -1,8 +1,8 @@
 import os
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
-from datetime import datetime
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Optional, List
 
 from models import Schedule, User
 
@@ -26,6 +26,96 @@ async def connect():
 
 async def disconnect():
   pass # In a real app, you might want to dispose the engine
+
+def delete_user(user_id: int) -> bool:
+    with Session(_require_engine()) as session:
+        user = session.get(User, user_id)
+        if not user:
+            return False
+        session.delete(user)
+        session.commit()
+        return True
+
+
+def update_user_password(user_id: int, new_password_hash: str) -> bool:
+    with Session(_require_engine()) as session:
+        user = session.get(User, user_id)
+        if not user:
+            return False
+        user.password_hash = new_password_hash
+        session.commit()
+        return True
+
+
+def list_all_users() -> list[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        rows = session.execute(
+            text("SELECT id, username, is_house_owner, house_owner_id FROM users ORDER BY id ASC")
+        ).mappings().all()
+        return [
+            {
+                "id": str(row["id"]),
+                "username": row["username"],
+                "role": "homeowner" if row["is_house_owner"] else "family_member",
+                "house_owner_id": str(row["house_owner_id"]) if row["house_owner_id"] is not None else None,
+            }
+            for row in rows
+        ]
+
+
+def update_device_info(
+    feed_key: str,
+    *,
+    name: Optional[str] = None,
+    location: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        updates: dict[str, Any] = {}
+        if name is not None:
+            updates["name"] = name
+        if location is not None:
+            updates["location"] = location
+        if not updates:
+            return None
+        set_clause = ", ".join([f"{col} = :{col}" for col in updates])
+        params: dict[str, Any] = {"feed_key": feed_key, **updates}
+        row = session.execute(
+            text(
+                f"UPDATE devices SET {set_clause} WHERE feed_key = :feed_key"
+                " RETURNING id, feed_key, name, location"
+            ),
+            params,
+        ).mappings().first()
+        session.commit()
+        return dict(row) if row else None
+
+
+def update_sensor_info(
+    feed_key: str,
+    *,
+    name: Optional[str] = None,
+    location: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        updates: dict[str, Any] = {}
+        if name is not None:
+            updates["name"] = name
+        if location is not None:
+            updates["location"] = location
+        if not updates:
+            return None
+        set_clause = ", ".join([f"{col} = :{col}" for col in updates])
+        params: dict[str, Any] = {"feed_key": feed_key, **updates}
+        row = session.execute(
+            text(
+                f"UPDATE sensors SET {set_clause} WHERE feed_key = :feed_key"
+                " RETURNING id, feed_key, name, location"
+            ),
+            params,
+        ).mappings().first()
+        session.commit()
+        return dict(row) if row else None
+
 
 def get_user_by_id(user_id: int):
   with Session(_require_engine()) as session:
@@ -237,6 +327,7 @@ def get_setting_profile_thresholds(setting_profile_id: int) -> Optional[dict[str
                 """
                 SELECT
                     id AS setting_profile_id,
+                    name,
                     temp_lower_threshold,
                     temp_upper_threshold,
                     humidity_lower_threshold,
@@ -535,6 +626,7 @@ def list_sensors_from_db() -> list[dict[str, Any]]:
         )
 
         unit_col = "unit" if "unit" in sensor_columns else None
+        sensor_location_col = "location" if "location" in sensor_columns else None
 
         select_cols = ["feed_key", "name", "type", "location"]
         if unit_col:
@@ -549,6 +641,10 @@ def list_sensors_from_db() -> list[dict[str, Any]]:
             select_cols.append(f"{time_col} AS last_recorded_at")
         else:
             select_cols.append("NULL AS last_recorded_at")
+        if sensor_location_col:
+            select_cols.append("location")
+        else:
+            select_cols.append("NULL AS location")
 
         query = f"SELECT {', '.join(select_cols)} FROM sensors ORDER BY id ASC"
         rows = session.execute(text(query)).mappings().all()
@@ -568,7 +664,9 @@ def list_devices_from_db() -> list[dict[str, Any]]:
             "last_recorded_at" if "last_recorded_at" in device_columns else None
         )
 
-        select_cols = ["feed_key", "name", "type", "status", "location"]
+        location_col = "location" if "location" in device_columns else None
+
+        select_cols = ["feed_key", "name", "type", "status"]
         if value_col:
             select_cols.append(f"{value_col} AS value")
         else:
@@ -577,6 +675,10 @@ def list_devices_from_db() -> list[dict[str, Any]]:
             select_cols.append(f"{time_col} AS last_record_time")
         else:
             select_cols.append("NULL AS last_record_time")
+        if location_col:
+            select_cols.append("location")
+        else:
+            select_cols.append("NULL AS location")
 
         query = f"SELECT {', '.join(select_cols)} FROM devices ORDER BY id ASC"
         rows = session.execute(text(query)).mappings().all()
@@ -882,3 +984,307 @@ def sync_feed_latest_values(feeds: list[dict[str, Any]]) -> None:
                     )
 
         session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Mode settings (away mode / automation mode)
+# ---------------------------------------------------------------------------
+
+def _safe_bool(cols: set, col: str, alias: str) -> str:
+    return f"sp.{col} AS {alias}" if col in cols else f"FALSE AS {alias}"
+
+
+def _safe_int(cols: set, col: str, alias: str, default: int) -> str:
+    return f"sp.{col} AS {alias}" if col in cols else f"{default} AS {alias}"
+
+
+def get_mode_settings(setting_profile_id: int) -> dict[str, Any]:
+    with Session(_require_engine()) as session:
+        cols = _get_table_columns(session, "setting_profiles")
+
+        # No table alias in this query — do NOT use sp.col prefix.
+        def _col_or_bool(col: str) -> str:
+            return col if col in cols else f"FALSE AS {col}"
+
+        def _col_or_int(col: str, default: int) -> str:
+            return col if col in cols else f"{default} AS {col}"
+
+        selects = [
+            "name" if "name" in cols else "NULL AS name",
+            _col_or_bool("away_mode"),
+            _col_or_bool("automation_mode"),
+            _col_or_bool("door_auto_lock"),
+            _col_or_int("door_auto_lock_delay_sec", 120),
+        ]
+        row = session.execute(
+            text(f"SELECT {', '.join(selects)} FROM setting_profiles WHERE id = :id LIMIT 1"),
+            {"id": setting_profile_id},
+        ).mappings().first()
+        if not row:
+            return {"name": None, "away_mode": False, "automation_mode": False, "door_auto_lock": False, "door_auto_lock_delay_sec": 120}
+        return dict(row)
+
+
+def get_active_automation_settings() -> Optional[dict[str, Any]]:
+    """Return mode settings from the house owner's currently active profile."""
+    with Session(_require_engine()) as session:
+        cols = _get_table_columns(session, "setting_profiles")
+        selects = [
+            "sp.id AS profile_id",
+            "sp.name",
+            "sp.away_mode",
+            _safe_bool(cols, "automation_mode", "automation_mode"),
+            _safe_bool(cols, "door_auto_lock", "door_auto_lock"),
+            _safe_int(cols, "door_auto_lock_delay_sec", "door_auto_lock_delay_sec", 120),
+        ]
+        row = session.execute(
+            text(
+                f"""
+                SELECT {', '.join(selects)}
+                FROM users u
+                JOIN setting_profiles sp ON sp.id = u.current_setting_profile_id
+                WHERE u.is_house_owner = TRUE
+                LIMIT 1
+                """
+            )
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def update_away_mode(setting_profile_id: int, enabled: bool) -> None:
+    with Session(_require_engine()) as session:
+        session.execute(
+            text("UPDATE setting_profiles SET away_mode = :v WHERE id = :id"),
+            {"v": enabled, "id": setting_profile_id},
+        )
+        session.commit()
+
+
+def update_automation_mode(
+    setting_profile_id: int,
+    *,
+    enabled: Optional[bool] = None,
+    door_auto_lock: Optional[bool] = None,
+    door_auto_lock_delay_sec: Optional[int] = None,
+) -> None:
+    with Session(_require_engine()) as session:
+        cols = _get_table_columns(session, "setting_profiles")
+        updates: dict[str, Any] = {}
+        if enabled is not None and "automation_mode" in cols:
+            updates["automation_mode"] = enabled
+        if door_auto_lock is not None and "door_auto_lock" in cols:
+            updates["door_auto_lock"] = door_auto_lock
+        if door_auto_lock_delay_sec is not None and "door_auto_lock_delay_sec" in cols:
+            updates["door_auto_lock_delay_sec"] = door_auto_lock_delay_sec
+        if not updates:
+            return
+        set_clause = ", ".join(f"{c} = :{c}" for c in updates)
+        session.execute(
+            text(f"UPDATE setting_profiles SET {set_clause} WHERE id = :id"),
+            {"id": setting_profile_id, **updates},
+        )
+        session.commit()
+
+
+def get_device_id_by_feed_key(feed_key: str) -> Optional[int]:
+    with Session(_require_engine()) as session:
+        row = session.execute(
+            text("SELECT id FROM devices WHERE feed_key = :fk LIMIT 1"),
+            {"fk": feed_key},
+        ).first()
+        return row[0] if row else None
+
+
+def get_device_info_by_feed_key(feed_key: str) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        cols = _get_table_columns(session, "devices")
+        value_col = "value" if "value" in cols else ("current_value" if "current_value" in cols else None)
+        time_col = "last_record_time" if "last_record_time" in cols else ("last_recorded_at" if "last_recorded_at" in cols else None)
+        selects = ["feed_key", "name"]
+        selects.append(f"{value_col} AS value" if value_col else "NULL AS value")
+        selects.append(f"{time_col} AS last_record_time" if time_col else "NULL AS last_record_time")
+        row = session.execute(
+            text(f"SELECT {', '.join(selects)} FROM devices WHERE feed_key = :fk LIMIT 1"),
+            {"fk": feed_key},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Automation rules
+# ---------------------------------------------------------------------------
+
+def _table_exists(session: Session, table_name: str) -> bool:
+    row = session.execute(
+        text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = :t LIMIT 1"
+        ),
+        {"t": table_name},
+    ).first()
+    return row is not None
+
+
+def _rule_row_to_dict(row: Any) -> dict[str, Any]:
+    r = dict(row)
+    # Stringify large integer IDs — JavaScript Number loses precision above 2^53,
+    # so BIGINT IDs (≈10^18) would be silently rounded and 404 on update/delete.
+    for key in ("id", "setting_profile_id", "device_id"):
+        if r.get(key) is not None:
+            r[key] = str(r[key])
+    raw_time = r.get("time_of_day") or ""
+    r["time_of_day"] = str(raw_time)[:5]  # "HH:MM"
+    raw_days = r.get("days_of_week") or ""
+    r["days_of_week"] = [d for d in raw_days.split(",") if d]
+    return r
+
+
+def list_automation_rules(setting_profile_id: int) -> List[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        if not _table_exists(session, "automation_rules"):
+            return []
+        rows = session.execute(
+            text(
+                """
+                SELECT ar.id, ar.setting_profile_id, ar.device_id,
+                       d.feed_key, d.name AS device_name,
+                       ar.value, ar.time_of_day::text, ar.days_of_week, ar.enabled
+                FROM automation_rules ar
+                JOIN devices d ON d.id = ar.device_id
+                WHERE ar.setting_profile_id = :pid
+                ORDER BY ar.time_of_day ASC
+                """
+            ),
+            {"pid": setting_profile_id},
+        ).mappings().all()
+        return [_rule_row_to_dict(r) for r in rows]
+
+
+def list_all_active_automation_rules() -> List[dict[str, Any]]:
+    """Return all enabled rules for the house owner's active profile (used by worker)."""
+    with Session(_require_engine()) as session:
+        if not _table_exists(session, "automation_rules"):
+            return []
+        rows = session.execute(
+            text(
+                """
+                SELECT ar.id, ar.setting_profile_id, ar.device_id,
+                       d.feed_key, d.name AS device_name,
+                       ar.value, ar.time_of_day::text, ar.days_of_week, ar.enabled
+                FROM automation_rules ar
+                JOIN devices d ON d.id = ar.device_id
+                JOIN setting_profiles sp ON sp.id = ar.setting_profile_id
+                JOIN users u ON u.current_setting_profile_id = sp.id
+                WHERE u.is_house_owner = TRUE AND ar.enabled = TRUE
+                ORDER BY ar.time_of_day ASC
+                """
+            )
+        ).mappings().all()
+        return [_rule_row_to_dict(r) for r in rows]
+
+
+def get_automation_rule_by_id(rule_id: int) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        if not _table_exists(session, "automation_rules"):
+            return None
+        row = session.execute(
+            text(
+                """
+                SELECT ar.id, ar.setting_profile_id, ar.device_id,
+                       d.feed_key, ar.value, ar.time_of_day::text, ar.days_of_week, ar.enabled
+                FROM automation_rules ar
+                JOIN devices d ON d.id = ar.device_id
+                WHERE ar.id = :id
+                """
+            ),
+            {"id": rule_id},
+        ).mappings().first()
+        return _rule_row_to_dict(row) if row else None
+
+
+def create_automation_rule(
+    *,
+    setting_profile_id: int,
+    device_id: int,
+    value: str,
+    time_of_day: str,
+    days_of_week: str,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    with Session(_require_engine()) as session:
+        row = session.execute(
+            text(
+                """
+                INSERT INTO automation_rules
+                    (setting_profile_id, device_id, value, time_of_day, days_of_week, enabled)
+                VALUES (:pid, :device_id, :value, CAST(:tod AS TIME), :days, :enabled)
+                RETURNING id, setting_profile_id, device_id, value,
+                          time_of_day::text, days_of_week, enabled
+                """
+            ),
+            {
+                "pid": setting_profile_id,
+                "device_id": device_id,
+                "value": value,
+                "tod": time_of_day,
+                "days": days_of_week,
+                "enabled": enabled,
+            },
+        ).mappings().first()
+        session.commit()
+        return _rule_row_to_dict(row)
+
+
+def update_automation_rule(
+    rule_id: int,
+    *,
+    value: Optional[str] = None,
+    time_of_day: Optional[str] = None,
+    days_of_week: Optional[str] = None,
+    enabled: Optional[bool] = None,
+) -> Optional[dict[str, Any]]:
+    with Session(_require_engine()) as session:
+        updates: dict[str, Any] = {}
+        if value is not None:
+            updates["value"] = value
+        if time_of_day is not None:
+            updates["time_of_day"] = time_of_day
+        if days_of_week is not None:
+            updates["days_of_week"] = days_of_week
+        if enabled is not None:
+            updates["enabled"] = enabled
+        if not updates:
+            return get_automation_rule_by_id(rule_id)
+
+        set_parts = []
+        params: dict[str, Any] = {"id": rule_id}
+        for col, val in updates.items():
+            if col == "time_of_day":
+                set_parts.append("time_of_day = CAST(:time_of_day AS TIME)")
+            else:
+                set_parts.append(f"{col} = :{col}")
+            params[col] = val
+
+        row = session.execute(
+            text(
+                f"""
+                UPDATE automation_rules SET {', '.join(set_parts)}
+                WHERE id = :id
+                RETURNING id, setting_profile_id, device_id, value,
+                          time_of_day::text, days_of_week, enabled
+                """
+            ),
+            params,
+        ).mappings().first()
+        session.commit()
+        return _rule_row_to_dict(row) if row else None
+
+
+def delete_automation_rule(rule_id: int) -> bool:
+    with Session(_require_engine()) as session:
+        result = session.execute(
+            text("DELETE FROM automation_rules WHERE id = :id RETURNING id"),
+            {"id": rule_id},
+        ).first()
+        session.commit()
+        return result is not None
