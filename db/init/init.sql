@@ -22,7 +22,8 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     is_house_owner BOOLEAN NOT NULL DEFAULT FALSE,
-    current_setting_profile_id INTEGER
+    current_setting_profile_id INTEGER,
+    house_owner_id INTEGER
 );
 
 CREATE TABLE setting_profiles (
@@ -46,22 +47,22 @@ CREATE TABLE devices (
     id SERIAL PRIMARY KEY,
     feed_key VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(100) UNIQUE NOT NULL,
-    location VARCHAR(100) NOT NULL,
     type device_type NOT NULL,
     status device_status NOT NULL DEFAULT 'OFFLINE',
     value TEXT,
-    last_record_time TIMESTAMPTZ
+    last_record_time TIMESTAMPTZ,
+    location VARCHAR(100)
 );
 
 CREATE TABLE sensors (
     id SERIAL PRIMARY KEY,
     feed_key VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(100) UNIQUE NOT NULL,
-    location VARCHAR(100) NOT NULL,
     type sensor_type NOT NULL,
     unit VARCHAR(32),
     current_value TEXT,
-    last_recorded_at TIMESTAMPTZ
+    last_recorded_at TIMESTAMPTZ,
+    location VARCHAR(100)
 );
 
 CREATE TABLE schedules (
@@ -134,17 +135,17 @@ WHERE u.username = 'admin'
 
 -- Seed from current Adafruit feed list:
 -- Devices (controllable): door, lb1, light-pwm, pir, rgb
-INSERT INTO devices (feed_key, name, type, status, value, last_record_time, location) VALUES
-    ('door', 'DOOR', 'DOOR', 'ONLINE', 'OPEN', '2026-04-16T09:05:03Z', 'Living room'),
-    ('lb1', 'LB1', 'LIGHT', 'ONLINE', '41', '2026-04-16T09:05:07Z', 'Living room'),
-    ('light-pwm', 'light_pwm', 'DIMMER', 'ONLINE', NULL, NULL, 'Living room'),
-    ('pir', 'PIR', 'MOTION', 'ONLINE', 'ON', '2026-04-16T09:05:03Z', 'Living room'),
-    ('rgb', 'RGB', 'RGB', 'ONLINE', '15', '2026-04-16T09:05:09Z', 'Living room');
+INSERT INTO devices (feed_key, name, type, status, value, last_record_time) VALUES
+    ('door', 'DOOR', 'DOOR', 'ONLINE', 'OPEN', '2026-04-16T09:05:03Z'),
+    ('lb1', 'LB1', 'LIGHT', 'ONLINE', '41', '2026-04-16T09:05:07Z'),
+    ('light-pwm', 'light_pwm', 'DIMMER', 'ONLINE', NULL, NULL),
+    ('pir', 'PIR', 'MOTION', 'ONLINE', 'ON', '2026-04-16T09:05:03Z'),
+    ('rgb', 'RGB', 'RGB', 'ONLINE', '15', '2026-04-16T09:05:09Z');
 
 -- Sensors (read-only): temperature, humidity, rain, gas, themis
 INSERT INTO sensors (feed_key, name, type, unit, current_value, last_recorded_at) VALUES
-    ('temperature', 'temperature', 'TEMPERATURE', '°C', '28.00', '2026-04-13T06:14:57Z', 'Living room'),
-    ('humidity', 'humidity', 'HUMIDITY', '%', '45', '2026-04-13T06:14:58Z', 'Living room'),
-    ('rain', 'rain', 'RAIN', 'raw', '716', '2026-04-13T06:14:58Z', 'Living room'),
-    ('gas', 'gas', 'GAS', 'ppm', '820', '2026-04-13T06:14:58Z', 'Living room'),
-    ('themis', 'themis', 'LIGHT_INTENSITY', '%', '82', '2026-04-13T06:14:58Z', 'Living room');
+    ('temperature', 'temperature', 'TEMPERATURE', '°C', '28.00', '2026-04-13T06:14:57Z'),
+    ('humidity', 'humidity', 'HUMIDITY', '%', '45', '2026-04-13T06:14:58Z'),
+    ('rain', 'rain', 'RAIN', 'raw', '716', '2026-04-13T06:14:58Z'),
+    ('gas', 'gas', 'GAS', 'ppm', '820', '2026-04-13T06:14:58Z'),
+    ('themis', 'themis', 'LIGHT_INTENSITY', '%', '82', '2026-04-13T06:14:58Z');
